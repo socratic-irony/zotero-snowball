@@ -1,0 +1,137 @@
+<?xml version="1.0"?>
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+<?xml-stylesheet href="chrome://zotero-platform/content/zotero.css" type="text/css"?>
+<?xml-stylesheet href="chrome://snowball-sources/content/snowballDialog.css" type="text/css"?>
+<window
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  title="Snowball Sources"
+  width="1200"
+  height="780"
+  minwidth="900"
+  minheight="520"
+  onload="SnowballDialog.onLoad(window.arguments[0])">
+
+  <linkset>
+    <html:link rel="localization" href="snowball-sources.ftl"/>
+  </linkset>
+
+  <!-- Load shared modules into the dialog window scope. Order matters:
+       log/errors/http are foundations, util feeds ranking/openalex, and
+       the dialog script runs last. The bootstrap-time loadSubScript only
+       reaches the bootstrap scope; the dialog window has its own global. -->
+  <script src="chrome://snowball-sources/content/modules/log.js"/>
+  <script src="chrome://snowball-sources/content/modules/errors.js"/>
+  <script src="chrome://snowball-sources/content/modules/http.js"/>
+  <script src="chrome://snowball-sources/content/modules/util.js"/>
+  <script src="chrome://snowball-sources/content/modules/ranking.js"/>
+  <script src="chrome://snowball-sources/content/modules/openalex.js"/>
+  <script src="chrome://snowball-sources/content/modules/zoteroItems.js"/>
+  <script src="chrome://snowball-sources/content/snowballDialog.js"/>
+
+  <vbox flex="1" class="snowball-dialog">
+    <hbox align="center" class="snowball-toolbar">
+      <html:div id="snowball-loading" class="snowball-loading">
+        <html:span class="snowball-spinner" aria-hidden="true"/>
+      </html:div>
+      <html:span id="snowball-summary" class="snowball-summary">Starting…</html:span>
+      <html:span id="snowball-progress" class="snowball-progress"></html:span>
+      <spacer flex="1"/>
+      <html:input id="snowball-filter"
+                  type="search"
+                  class="snowball-filter"
+                  placeholder="Filter title, author, venue…"/>
+      <html:select id="snowball-direction-filter" class="snowball-select">
+        <html:option value="all">All directions</html:option>
+        <html:option value="backward">Backward only</html:option>
+        <html:option value="forward">Forward only</html:option>
+      </html:select>
+      <html:label class="snowball-toggle">
+        <html:input id="snowball-hide-existing" type="checkbox"/>
+        <html:span>Hide items already in library</html:span>
+      </html:label>
+    </hbox>
+
+    <hbox flex="1" class="snowball-body">
+      <html:div id="snowball-table-container">
+        <html:table id="snowball-table">
+          <html:thead>
+            <html:tr id="snowball-header-row">
+              <html:th class="col-add">
+                <html:input id="snowball-select-all"
+                            type="checkbox"
+                            title="Select / deselect all visible candidates"/>
+              </html:th>
+              <html:th class="col-score sortable" data-sort-key="relevanceScore">
+                <html:span class="th-label">Score</html:span>
+                <html:span class="th-arrow"/>
+              </html:th>
+              <html:th class="col-direction sortable" data-sort-key="direction">
+                <html:span class="th-label">Direction</html:span>
+                <html:span class="th-arrow"/>
+              </html:th>
+              <html:th class="col-status sortable" data-sort-key="alreadyInLibrary">
+                <html:span class="th-label">Status</html:span>
+                <html:span class="th-arrow"/>
+              </html:th>
+              <html:th class="col-year sortable" data-sort-key="year">
+                <html:span class="th-label">Year</html:span>
+                <html:span class="th-arrow"/>
+              </html:th>
+              <html:th class="col-title sortable" data-sort-key="title">
+                <html:span class="th-label">Title</html:span>
+                <html:span class="th-arrow"/>
+              </html:th>
+              <html:th class="col-authors sortable" data-sort-key="authors">
+                <html:span class="th-label">Authors</html:span>
+                <html:span class="th-arrow"/>
+              </html:th>
+              <html:th class="col-venue sortable" data-sort-key="venue">
+                <html:span class="th-label">Venue</html:span>
+                <html:span class="th-arrow"/>
+              </html:th>
+              <html:th class="col-cited sortable" data-sort-key="citedByCount">
+                <html:span class="th-label">Cited By</html:span>
+                <html:span class="th-arrow"/>
+              </html:th>
+            </html:tr>
+          </html:thead>
+          <html:tbody id="snowball-tbody"/>
+        </html:table>
+        <html:div id="snowball-empty-state" hidden="hidden">
+          No candidates match your filters.
+        </html:div>
+      </html:div>
+
+      <html:div id="snowball-splitter"
+                role="separator"
+                aria-orientation="vertical"
+                title="Drag to resize"/>
+
+      <html:aside id="snowball-details">
+        <html:h2 id="snowball-detail-title">Select a candidate</html:h2>
+        <html:p id="snowball-detail-meta"/>
+        <html:p id="snowball-detail-authors"/>
+        <html:p id="snowball-detail-abstract"/>
+      </html:aside>
+    </hbox>
+
+    <hbox align="center" class="snowball-footer">
+      <html:span id="snowball-selection-count" class="snowball-selection-count">0 selected</html:span>
+      <spacer flex="1"/>
+      <button id="snowball-stop"
+              label="Stop"
+              hidden="hidden"
+              oncommand="SnowballDialog.stop()"/>
+      <button id="snowball-cancel"
+              label="Cancel"
+              data-l10n-id="snowball-sources-button-cancel"
+              oncommand="window.close()"/>
+      <button id="snowball-add-selected"
+              label="Add Selected to Zotero"
+              data-l10n-id="snowball-sources-button-add-selected"
+              class="primary"
+              oncommand="SnowballDialog.addSelected()"/>
+    </hbox>
+  </vbox>
+</window>

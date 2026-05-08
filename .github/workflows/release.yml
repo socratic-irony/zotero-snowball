@@ -1,0 +1,162 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.2.1)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, publish release, update manifest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Need full history + write permission so we can push updates.json
+          # back to main after the release is created.
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install libxml2-utils and zip
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libxml2-utils zip
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            REF="${{ github.event.inputs.tag }}"
+          else
+            REF="${GITHUB_REF##refs/tags/}"
+          fi
+          if ! [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$REF' must match v<MAJOR>.<MINOR>.<PATCH>"
+            exit 1
+          fi
+          VERSION="${REF#v}"
+          echo "tag=$REF"         >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify manifest version matches tag
+        run: |
+          MANIFEST_VERSION=$(node -p "require('./src/manifest.json').version")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          EXPECTED="${{ steps.tag.outputs.version }}"
+          if [ "$MANIFEST_VERSION" != "$EXPECTED" ] || [ "$PKG_VERSION" != "$EXPECTED" ]; then
+            echo "::error::Tag is $EXPECTED but manifest.json=$MANIFEST_VERSION, package.json=$PKG_VERSION."
+            echo "::error::Run scripts/bump-version.sh $EXPECTED before tagging."
+            exit 1
+          fi
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build XPI
+        run: npm run build
+
+      - name: Validate XPI
+        run: npm run validate:xpi
+
+      - name: Locate built XPI
+        id: xpi
+        run: |
+          XPI="build/snowball-sources-${{ steps.tag.outputs.version }}.xpi"
+          if [ ! -f "$XPI" ]; then
+            echo "::error::Expected $XPI was not produced by the build."
+            ls -la build/
+            exit 1
+          fi
+          echo "path=$XPI" >> "$GITHUB_OUTPUT"
+
+      - name: Compute SHA-256 of XPI
+        id: sha
+        run: |
+          SHA=$(sha256sum "${{ steps.xpi.outputs.path }}" | cut -d' ' -f1)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog section for this version
+        id: notes
+        run: |
+          VERSION="${{ steps.tag.outputs.version }}"
+          NOTES=$(awk -v v="$VERSION" '
+            BEGIN { found=0 }
+            /^## \[/ {
+              if (found) exit
+              if ($0 ~ "\\[" v "\\]") { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES="See [CHANGELOG.md](./CHANGELOG.md)."
+          fi
+          {
+            echo "notes<<EOF"
+            echo "$NOTES"
+            echo ""
+            echo "---"
+            echo ""
+            echo "**SHA-256**: \`${{ steps.sha.outputs.sha256 }}\`"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          body: ${{ steps.notes.outputs.notes }}
+          draft: false
+          prerelease: false
+          files: ${{ steps.xpi.outputs.path }}
+          fail_on_unmatched_files: true
+
+      - name: Regenerate updates.json
+        run: |
+          node scripts/update-manifest.mjs \
+            --version "${{ steps.tag.outputs.version }}" \
+            --xpi-url "https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/snowball-sources-${{ steps.tag.outputs.version }}.xpi" \
+            --sha256 "${{ steps.sha.outputs.sha256 }}"
+
+      - name: Commit updated updates.json back to main
+        run: |
+          if git diff --quiet -- updates.json; then
+            echo "updates.json unchanged."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # We're on a detached tag; check out main, apply the change, push.
+          git fetch origin main
+          git checkout main
+          # Re-run the generator against the version we just released so the
+          # commit on main is exactly the artifact we already published.
+          node scripts/update-manifest.mjs \
+            --version "${{ steps.tag.outputs.version }}" \
+            --xpi-url "https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/snowball-sources-${{ steps.tag.outputs.version }}.xpi" \
+            --sha256 "${{ steps.sha.outputs.sha256 }}"
+          if git diff --quiet -- updates.json; then
+            echo "updates.json already up to date on main."
+            exit 0
+          fi
+          git add updates.json
+          git commit -m "chore(release): updates.json for ${{ steps.tag.outputs.tag }}"
+          git push origin main

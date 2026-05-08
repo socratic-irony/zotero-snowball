@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+<?xml-stylesheet href="chrome://zotero-platform/content/zotero.css" type="text/css"?>
+<?xml-stylesheet href="chrome://snowball-sources/content/snowballPrefs.css" type="text/css"?>
+<window
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  title="Snowball Sources Preferences"
+  width="520"
+  height="520"
+  onload="SnowballPrefs.onLoad(window.arguments[0])">
+
+  <script src="chrome://snowball-sources/content/modules/log.js"/>
+  <script src="chrome://snowball-sources/content/modules/errors.js"/>
+  <script src="chrome://snowball-sources/content/snowballPrefs.js"/>
+
+  <vbox flex="1" class="snowball-prefs">
+    <html:section>
+      <html:h2>API Keys</html:h2>
+      <html:p class="hint">
+        Optional. OpenAlex works without a key but recommends one for sustained use;
+        a Semantic Scholar key unlocks higher rate limits and (in future) abstract
+        enrichment for candidates that don't have one from OpenAlex.
+      </html:p>
+
+      <html:label class="row">
+        <html:span class="label">OpenAlex API key</html:span>
+        <html:input id="pref-openAlexAPIKey" type="text" placeholder="(none)"/>
+      </html:label>
+
+      <html:label class="row">
+        <html:span class="label">Semantic Scholar API key</html:span>
+        <html:input id="pref-semanticScholarAPIKey" type="text" placeholder="(none)"/>
+      </html:label>
+    </html:section>
+
+    <html:section>
+      <html:h2>Search scope</html:h2>
+
+      <html:label class="row inline">
+        <html:input id="pref-includeBackward" type="checkbox"/>
+        <html:span>Include backward references (works the seeds cite)</html:span>
+      </html:label>
+
+      <html:label class="row inline">
+        <html:input id="pref-includeForward" type="checkbox"/>
+        <html:span>Include forward citations (works that cite the seeds)</html:span>
+      </html:label>
+
+      <html:label class="row inline">
+        <html:input id="pref-skipAlreadyInLibrary" type="checkbox"/>
+        <html:span>Uncheck candidates already in your library by default</html:span>
+      </html:label>
+    </html:section>
+
+    <html:section>
+      <html:h2>Limits</html:h2>
+
+      <html:label class="row">
+        <html:span class="label">Max seeds per run</html:span>
+        <html:input id="pref-maxSeeds" type="number" min="1" max="500"/>
+      </html:label>
+
+      <html:label class="row">
+        <html:span class="label">Max backward references per seed</html:span>
+        <html:input id="pref-maxBackwardPerSeed" type="number" min="0" max="1000"/>
+      </html:label>
+
+      <html:label class="row">
+        <html:span class="label">Max forward citations per seed</html:span>
+        <html:input id="pref-maxForwardPerSeed" type="number" min="0" max="1000"/>
+      </html:label>
+
+      <html:label class="row">
+        <html:span class="label">Max total candidates</html:span>
+        <html:input id="pref-maxCandidatesTotal" type="number" min="1" max="10000"/>
+      </html:label>
+    </html:section>
+
+    <hbox align="center" class="snowball-prefs-footer">
+      <spacer flex="1"/>
+      <button label="Cancel" oncommand="window.close()"/>
+      <button label="Save" class="primary" oncommand="SnowballPrefs.save()"/>
+    </hbox>
+  </vbox>
+</window>

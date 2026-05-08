@@ -1,0 +1,25 @@
+{
+  "name": "zotero-snowball-sources",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Zotero plugin for OpenAlex forward and backward citation snowballing.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/socratic-irony/zotero-snowball.git"
+  },
+  "bugs": {
+    "url": "https://github.com/socratic-irony/zotero-snowball/issues"
+  },
+  "homepage": "https://github.com/socratic-irony/zotero-snowball#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "bash scripts/build.sh",
+    "validate:xpi": "bash scripts/validate-xpi.sh",
+    "validate:manifest": "python3 -m json.tool src/manifest.json > /dev/null && xmllint --noout src/chrome/content/snowballDialog.xhtml && xmllint --noout src/chrome/content/snowballPrefs.xhtml",
+    "bump": "bash scripts/bump-version.sh"
+  }
+}

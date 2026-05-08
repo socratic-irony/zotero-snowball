@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test & build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install libxml2-utils (xmllint) and zip
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libxml2-utils zip
+
+      - name: Install npm deps
+        # No runtime deps; this just verifies package.json is well-formed.
+        run: npm ci || npm install --no-save
+
+      - name: Validate manifest JSON
+        run: python3 -m json.tool src/manifest.json > /dev/null
+
+      - name: Validate dialog XHTML
+        run: |
+          xmllint --noout src/chrome/content/snowballDialog.xhtml
+          xmllint --noout src/chrome/content/snowballPrefs.xhtml
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build XPI
+        run: npm run build
+
+      - name: Validate XPI
+        run: npm run validate:xpi
+
+      - name: Verify version sync between package.json and manifest.json
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          MANIFEST_VERSION=$(node -p "require('./src/manifest.json').version")
+          if [ "$PKG_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::package.json ($PKG_VERSION) and src/manifest.json ($MANIFEST_VERSION) versions are out of sync."
+            exit 1
+          fi
+          echo "Version $PKG_VERSION is consistent."
+
+      - name: Upload XPI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snowball-sources-xpi
+          path: build/*.xpi
+          if-no-files-found: error
+          retention-days: 14

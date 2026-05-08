@@ -1,0 +1,31 @@
+# Build artifacts
+build/
+
+# Node / package manager noise (we don't have runtime deps but pnpm/yarn/etc.
+# may drop these if a contributor runs them)
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+.pnpm-store/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local Zotero debug captures (handy during dev but not for the repo)
+/tmp/zotero-snowball-*.log
+
+# Local environment
+.env
+.env.local
+
+# Local agent / editor state
+.claude/

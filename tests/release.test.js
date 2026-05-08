@@ -1,0 +1,83 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+const { execFileSync } = require("node:child_process");
+
+const ROOT = path.resolve(__dirname, "..");
+
+test("CI and release workflows exist and parse as YAML-ish", () => {
+  const ci = path.join(ROOT, ".github/workflows/ci.yml");
+  const rel = path.join(ROOT, ".github/workflows/release.yml");
+  assert.ok(fs.existsSync(ci), "ci.yml must exist");
+  assert.ok(fs.existsSync(rel), "release.yml must exist");
+  for (const file of [ci, rel]) {
+    const text = fs.readFileSync(file, "utf8");
+    // Smoke check: must declare a top-level `name:`, `on:`, and `jobs:` block.
+    assert.match(text, /^name:\s+\S+/m, `${path.basename(file)} missing name`);
+    assert.match(text, /^on:\s*$|^on:\s*\S/m, `${path.basename(file)} missing on:`);
+    assert.match(text, /^jobs:\s*$/m, `${path.basename(file)} missing jobs:`);
+  }
+});
+
+test("release workflow only triggers on semver-shaped tags", () => {
+  const text = fs.readFileSync(
+    path.join(ROOT, ".github/workflows/release.yml"), "utf8"
+  );
+  // Guard against accidentally widening the trigger to any tag.
+  assert.match(text, /tags:\s*\n\s+- "v\[0-9\]\+\.\[0-9\]\+\.\[0-9\]\+"/);
+});
+
+test("LICENSE and CHANGELOG exist", () => {
+  assert.ok(fs.existsSync(path.join(ROOT, "LICENSE")), "LICENSE missing");
+  assert.ok(fs.existsSync(path.join(ROOT, "CHANGELOG.md")), "CHANGELOG missing");
+});
+
+test("updates.json exists and lists the current manifest version", () => {
+  const updates = JSON.parse(
+    fs.readFileSync(path.join(ROOT, "updates.json"), "utf8")
+  );
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(ROOT, "src/manifest.json"), "utf8")
+  );
+  const id = manifest.applications?.zotero?.id;
+  assert.ok(id, "manifest is missing addon id");
+  const entry = updates.addons?.[id];
+  assert.ok(entry, `updates.json has no entry for ${id}`);
+  assert.ok(Array.isArray(entry.updates) && entry.updates.length > 0,
+    "updates list is empty");
+  const latest = entry.updates[entry.updates.length - 1];
+  assert.equal(latest.version, manifest.version,
+    "updates.json latest version must match src/manifest.json#version");
+  assert.match(latest.update_link, /^https:\/\//, "update_link must be https");
+  assert.match(latest.update_hash, /^sha256:[a-f0-9]{64}$/i,
+    "update_hash must be sha256:<64 hex>");
+});
+
+test("update-manifest.mjs rejects bad input", () => {
+  const script = path.join(ROOT, "scripts/update-manifest.mjs");
+  for (const args of [
+    ["--version", "1.2", "--xpi-url", "https://x/y", "--sha256", "a".repeat(64)],
+    ["--version", "1.2.3", "--xpi-url", "http://x/y", "--sha256", "a".repeat(64)],
+    ["--version", "1.2.3", "--xpi-url", "https://x/y", "--sha256", "tooshort"]
+  ]) {
+    assert.throws(() => {
+      execFileSync(process.execPath, [script, ...args], { stdio: "pipe" });
+    }, undefined, `expected rejection for args: ${args.join(" ")}`);
+  }
+});
+
+test("bump-version.sh is executable and refuses non-monotonic targets", () => {
+  const script = path.join(ROOT, "scripts/bump-version.sh");
+  const stat = fs.statSync(script);
+  // 0o111 (--x--x--x) — at least the owner can execute.
+  assert.ok((stat.mode & 0o100) !== 0, "bump-version.sh must be executable");
+
+  const pkgVersion = JSON.parse(
+    fs.readFileSync(path.join(ROOT, "package.json"), "utf8")
+  ).version;
+  // 0.0.0 must be lower than current.
+  assert.throws(() => {
+    execFileSync(script, ["0.0.0"], { stdio: "pipe", cwd: ROOT });
+  }, undefined, `expected refusal to downgrade to 0.0.0 from ${pkgVersion}`);
+});
