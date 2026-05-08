@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] – 2026-05-08
+
+### Changed
+- Score breakdown moved from a floating tooltip to an inline **"Why
+  this score?"** section at the bottom of the details pane. The
+  tooltip approach rendered unreliably in Zotero's chrome window
+  (positioned in the wrong place, sometimes outside the dialog).
+  The inline panel is always visible, fits the existing layout, is
+  keyboard-friendly without any extra wiring, and styles negative
+  contributions in red so penalties are obvious.
+
 ## [0.4.1] – 2026-05-08
 
 ### Removed
@@ -236,7 +247,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.0...v0.3.1

@@ -700,68 +700,71 @@
 }
 
 /* ============================================================
- * Score breakdown tooltip
+ * Inline score breakdown (lives at the bottom of the details pane)
  * ============================================================ */
 
-.snowball-score-tooltip {
-  position: absolute;
-  z-index: 60;
-  pointer-events: none;       /* don't intercept the mouseleave */
-  min-width: 240px;
-  max-width: 320px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: light-dark(rgba(255, 255, 255, 0.98), rgba(28, 27, 34, 0.98));
-  color: var(--fill-primary, inherit);
-  border: 1px solid var(--snowball-border-strong);
-  box-shadow: 0 4px 12px color-mix(in srgb, currentColor 22%, transparent);
-  font-size: 11.5px;
-  line-height: 1.45;
-  /* Soft entrance so the tooltip doesn't jitter into view. */
-  animation: snowball-tooltip-in 0.08s ease-out;
+.snowball-detail-breakdown {
+  margin: 16px 0 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--snowball-border);
 }
-.snowball-score-tooltip[hidden] { display: none; }
+.snowball-detail-breakdown[hidden] { display: none; }
 
-.snowball-score-tooltip-list {
+.snowball-detail-breakdown-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--snowball-text-secondary);
+  margin: 0 0 6px 0;
+}
+
+.snowball-detail-breakdown-list {
   display: grid;
   grid-template-columns: 1fr auto;
   column-gap: 10px;
   row-gap: 2px;
   margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
-.snowball-score-tooltip-list dt {
+.snowball-detail-breakdown-list dt {
   margin: 0;
   color: var(--snowball-text-secondary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.snowball-score-tooltip-list dd {
+.snowball-detail-breakdown-list dd {
   margin: 0;
   text-align: right;
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
-.snowball-score-tooltip-num {
+.snowball-detail-breakdown-num {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  /* Default: muted, used for zero contributions. */
+  color: var(--snowball-text-secondary);
 }
 
-.snowball-score-tooltip-hint {
-  margin-left: 6px;
+.snowball-detail-breakdown-num.is-positive {
+  color: var(--fill-primary, inherit);
+}
+
+.snowball-detail-breakdown-num.is-negative {
+  color: light-dark(#b91c1c, #fca5a5);
+}
+
+.snowball-detail-breakdown-hint {
   font-size: 10.5px;
   color: var(--snowball-text-secondary);
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
-
-@keyframes snowball-tooltip-in {
-  from { opacity: 0; transform: translateY(-2px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* The tooltip is positioned relative to .snowball-dialog (which is the
-   nearest containing block once the dialog has `position: relative`).
-   Make sure the dialog establishes one — otherwise the tooltip would
-   escape to the OS window. */
-.snowball-dialog { position: relative; }

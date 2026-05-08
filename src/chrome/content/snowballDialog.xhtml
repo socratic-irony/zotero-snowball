@@ -58,8 +58,6 @@
       </html:label>
     </hbox>
 
-    <html:div id="snowball-score-tooltip" class="snowball-score-tooltip" hidden="hidden"/>
-
     <html:div id="snowball-toast" class="snowball-toast" hidden="hidden" role="status" aria-live="polite">
       <html:span id="snowball-toast-icon" class="snowball-toast-icon" aria-hidden="true"/>
       <html:span id="snowball-toast-message" class="snowball-toast-message"/>
@@ -143,6 +141,10 @@
         <html:p id="snowball-detail-meta"/>
         <html:p id="snowball-detail-authors"/>
         <html:p id="snowball-detail-abstract"/>
+        <html:section id="snowball-detail-breakdown" class="snowball-detail-breakdown" hidden="hidden">
+          <html:h3 class="snowball-detail-breakdown-title">Why this score?</html:h3>
+          <html:dl id="snowball-detail-breakdown-list" class="snowball-detail-breakdown-list"/>
+        </html:section>
       </html:aside>
     </hbox>
 

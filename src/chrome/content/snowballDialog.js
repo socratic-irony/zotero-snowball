@@ -889,92 +889,9 @@ var SnowballDialog = {
     if (value >= 50)      pill.classList.add("snowball-score-high");
     else if (value >= 25) pill.classList.add("snowball-score-mid");
     else                  pill.classList.add("snowball-score-low");
-    // Hover tooltip — custom positioned panel rather than the native
-    // `title` attribute, which Zotero's chrome environment renders
-    // unreliably (sometimes not at all) and limits to plain monospace.
-    const breakdown = candidate?._scoreBreakdown;
-    if (breakdown) {
-      pill.dataset.hasBreakdown = "1";
-      pill.addEventListener("mouseenter", e => this._showScoreTooltip(e, breakdown));
-      pill.addEventListener("mousemove",  e => this._positionScoreTooltip(e));
-      pill.addEventListener("mouseleave", () => this._hideScoreTooltip());
-      pill.addEventListener("focus",      e => this._showScoreTooltip(e, breakdown));
-      pill.addEventListener("blur",       () => this._hideScoreTooltip());
-      pill.tabIndex = 0;
-    }
     cell.appendChild(pill);
     tr.appendChild(cell);
     return cell;
-  },
-
-  // ---- Custom score tooltip ----------------------------------------------
-
-  _showScoreTooltip(event, b) {
-    const tip = document.getElementById("snowball-score-tooltip");
-    if (!tip || !b) return;
-
-    tip.replaceChildren();
-    const dl = this.createHTMLElement("dl");
-    dl.className = "snowball-score-tooltip-list";
-
-    const addRow = (label, value, hint) => {
-      const dt = this.createHTMLElement("dt");
-      dt.textContent = label;
-      const dd = this.createHTMLElement("dd");
-      const num = this.createHTMLElement("span");
-      num.className = "snowball-score-tooltip-num";
-      const v = Number(value) || 0;
-      num.textContent = (v >= 0 ? "+" : "") + v.toFixed(2);
-      dd.appendChild(num);
-      if (hint) {
-        const h = this.createHTMLElement("span");
-        h.className = "snowball-score-tooltip-hint";
-        h.textContent = hint;
-        dd.appendChild(h);
-      }
-      dl.appendChild(dt);
-      dl.appendChild(dd);
-    };
-
-    addRow("Text similarity",      b.text);
-    addRow("Bibliographic coupling", b.bibCoupling, b.bibCouplingRaw ? `${b.bibCouplingRaw} shared` : null);
-    addRow("Co-citation",          b.coCitation, b.coCitationRaw ? `${b.coCitationRaw} seed${b.coCitationRaw === 1 ? "" : "s"}` : null);
-    addRow("Author overlap",       b.authorOverlap);
-    addRow("Title fuzzy match",    b.titleTrigram);
-    addRow("Citation count",       b.citation);
-    if (b.embedding > 0)    addRow("S2 embedding",       b.embedding);
-    if (b.abstractPenalty)  addRow("Abstract penalty",   b.abstractPenalty);
-    if (b.duplicatePenalty) addRow("Already in library", b.duplicatePenalty);
-    if (b.directionBoost)   addRow("Both-directions",    b.directionBoost);
-
-    tip.appendChild(dl);
-    tip.removeAttribute("hidden");
-    this._positionScoreTooltip(event);
-  },
-
-  _positionScoreTooltip(event) {
-    const tip = document.getElementById("snowball-score-tooltip");
-    const dialog = document.querySelector(".snowball-dialog");
-    if (!tip || !dialog || tip.hasAttribute("hidden")) return;
-    const dr = dialog.getBoundingClientRect();
-    const tr = tip.getBoundingClientRect();
-    // Anchor near the cursor with a small offset; clamp inside the dialog.
-    const margin = 8;
-    let x = event.clientX - dr.left + 14;
-    let y = event.clientY - dr.top + 14;
-    if (x + tr.width + margin > dr.width) {
-      // Flip to the left of the cursor when there's no room on the right.
-      x = Math.max(margin, event.clientX - dr.left - tr.width - 14);
-    }
-    if (y + tr.height + margin > dr.height) {
-      y = Math.max(margin, event.clientY - dr.top - tr.height - 14);
-    }
-    tip.style.left = `${Math.round(x)}px`;
-    tip.style.top  = `${Math.round(y)}px`;
-  },
-
-  _hideScoreTooltip() {
-    document.getElementById("snowball-score-tooltip")?.setAttribute("hidden", "hidden");
   },
 
   appendDirectionCell(tr, direction) {
@@ -1067,6 +984,71 @@ var SnowballDialog = {
 
     document.getElementById("snowball-detail-abstract").textContent =
       candidate.abstract || "No abstract available.";
+
+    this._renderScoreBreakdown(candidate);
+  },
+
+  /**
+   * Render the per-signal contribution breakdown as a definition list at
+   * the bottom of the details pane. We store `_scoreBreakdown` on every
+   * candidate when scoreCandidate runs, so this is just a presentation
+   * pass — no recomputation.
+   */
+  _renderScoreBreakdown(candidate) {
+    const section = document.getElementById("snowball-detail-breakdown");
+    const list    = document.getElementById("snowball-detail-breakdown-list");
+    if (!section || !list) return;
+
+    const b = candidate?._scoreBreakdown;
+    if (!b) {
+      section.setAttribute("hidden", "hidden");
+      return;
+    }
+
+    list.replaceChildren();
+
+    const addRow = (label, value, hint) => {
+      const dt = this.createHTMLElement("dt");
+      dt.textContent = label;
+      const dd = this.createHTMLElement("dd");
+
+      const num = this.createHTMLElement("span");
+      num.className = "snowball-detail-breakdown-num";
+      const v = Number(value) || 0;
+      // Always show a sign for clarity, including +0.00.
+      num.textContent = (v >= 0 ? "+" : "") + v.toFixed(2);
+      // Tint penalties red, contributions in the secondary text color.
+      if (v < 0) num.classList.add("is-negative");
+      else if (v > 0) num.classList.add("is-positive");
+      dd.appendChild(num);
+
+      if (hint) {
+        const h = this.createHTMLElement("span");
+        h.className = "snowball-detail-breakdown-hint";
+        h.textContent = hint;
+        dd.appendChild(h);
+      }
+
+      list.appendChild(dt);
+      list.appendChild(dd);
+    };
+
+    // Always-present signals first.
+    addRow("Text similarity",        b.text);
+    addRow("Bibliographic coupling", b.bibCoupling,
+      b.bibCouplingRaw ? `${b.bibCouplingRaw} shared ref${b.bibCouplingRaw === 1 ? "" : "s"}` : null);
+    addRow("Co-citation",            b.coCitation,
+      b.coCitationRaw ? `${b.coCitationRaw} seed${b.coCitationRaw === 1 ? "" : "s"} cite this` : null);
+    addRow("Author overlap",         b.authorOverlap);
+    addRow("Title fuzzy match",      b.titleTrigram);
+    addRow("Citation count",         b.citation);
+    // Optional / conditional signals.
+    if (b.embedding > 0)    addRow("Semantic Scholar embedding", b.embedding);
+    if (b.abstractPenalty)  addRow("No abstract",                b.abstractPenalty);
+    if (b.duplicatePenalty) addRow("Already in library",         b.duplicatePenalty);
+    if (b.directionBoost)   addRow("Both directions bonus",      b.directionBoost);
+
+    section.removeAttribute("hidden");
   },
 
   _resolveDetailLink(candidate) {
