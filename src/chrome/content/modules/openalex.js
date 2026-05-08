@@ -215,6 +215,10 @@ var OpenAlexProvider = class {
       url: this.safeURL(location?.landing_page_url || doi || work.id || ""),
       pdfURL: this.safeURL(location?.pdf_url || ""),
       citedByCount: Number.isFinite(work.cited_by_count) ? Math.max(0, work.cited_by_count) : 0,
+      // Expose the candidate's own reference list so downstream ranking can
+      // compute bibliographic coupling against the seeds. Capped at 1000
+      // refs to keep candidate objects bounded.
+      referencedWorks: this.normalizeReferencedWorks(work.referenced_works, 1000),
       abstract: OpenAlexProvider.clampStr(
         this.reconstructAbstract(work.abstract_inverted_index), 8000
       ),
@@ -245,6 +249,20 @@ var OpenAlexProvider = class {
     const s = String(value == null ? "" : value);
     if (s.length <= max) return s;
     return s.slice(0, max);
+  }
+
+  normalizeReferencedWorks(value, max) {
+    if (!Array.isArray(value)) return [];
+    const out = [];
+    const seen = new Set();
+    for (const v of value) {
+      if (out.length >= max) break;
+      const id = this.shortOpenAlexID(v);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+    return out;
   }
 
   bestLocation(work) {
@@ -333,7 +351,22 @@ var OpenAlexProvider = class {
       };
       try {
         const work = await this.resolveSeed(seed, signal);
-        if (work) resolvedSeeds.push({ seed, work });
+        if (work) {
+          resolvedSeeds.push({ seed, work });
+          // Emit the resolved seed so the dialog can build the seed context
+          // (referenced_works, author set, title trigrams) used by the
+          // ranking module. We pass a *trimmed* shape so consumers don't
+          // accidentally hold onto the entire OpenAlex Work payload.
+          yield {
+            type: "seed-resolved",
+            seedIndex: i,
+            seed,
+            work: {
+              id: this.shortOpenAlexID(work.id),
+              referenced_works: this.normalizeReferencedWorks(work.referenced_works, 5000)
+            }
+          };
+        }
       } catch (error) {
         if (error?.name === "AbortError") return;
         this.debug(`Seed resolution failed for "${seed.title || seed.doi}": ${error}`);

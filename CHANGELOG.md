@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] – 2026-05-08
+
+### Added — relevance ranking overhaul
+- **Bibliographic coupling** signal: each candidate's score now includes the
+  multiplicity-weighted size of its reference-list intersection with the
+  combined references of the seed pool. Saturated at 20 shared refs to
+  keep survey papers from dominating.
+- **Co-citation** signal: scores reflect how many of the seeds reference
+  the candidate (`coCitationRaw / seedCount`), so a candidate cited by 4
+  of 5 seeds outranks one cited by 1 of 5.
+- **Author overlap** signal: fraction of the candidate's authors who also
+  appear in the seed pool (normalized: case + diacritic-folded).
+- **Title trigram Jaccard** signal: best similarity vs. any seed title
+  using length-3 character n-grams. Catches paraphrased titles in the
+  ranking.
+- **Fuzzy title dedupe**: same trigram-Jaccard mechanism, with a 0.85
+  threshold and a year-bucket index, now catches paraphrased duplicates
+  during ingest that exact DOI/title dedupe missed.
+- **Semantic Scholar SPECTER2 enrichment**: when (and only when) the user
+  has set `extensions.snowballSources.semanticScholarAPIKey`, the dialog
+  fetches embeddings for seeds + candidates after streaming completes,
+  computes the seed centroid, and mixes per-candidate cosine similarity
+  into the composite score (weight 0.40 — the highest single signal).
+- **Score breakdown** is persisted on each candidate (`_scoreBreakdown`)
+  for a future "explain why this scored high" tooltip and for tuning.
+
+### Added — infrastructure
+- New `modules/semanticscholar.js` with batch endpoint client, key gating,
+  and partial-success tolerance (a failed chunk doesn't kill the run).
+- New `SnowballUtil` helpers: `trigrams`, `jaccardSets`, `cosineDense`,
+  `normalizeAuthorName`, `shortOpenAlexID`.
+- HTTP wrapper now supports `POST` + body for the S2 batch endpoint.
+- `OpenAlexProvider.streamSnowball` now emits `seed-resolved` events
+  carrying the resolved Work's `referenced_works` so the dialog can
+  build the seed signature incrementally.
+- 14 new tests covering the new ranking signals, the trigram/Jaccard
+  utilities, and the S2 gating contract (no key → no traffic, verified
+  with a fetch-call counter).
+
+### Changed
+- Composite ranking: text cosine baseline (weight 1.0) is preserved; new
+  signals add up to ~0.63 in additional weight, with the optional
+  embedding signal adding another 0.40 when available. Penalties
+  (abstract / duplicate-in-library / direction-both) unchanged.
+
+### Privacy
+- Semantic Scholar is contacted **only** when an API key is configured.
+  No background calls, no anonymous use. The key travels in the
+  `x-api-key` header (never in the URL) so it never appears in any log
+  even before the scrubber runs.
+
 ## [0.2.1] – 2026-05-08
 
 ### Changed
@@ -89,7 +140,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.1.6...v0.2.0
 [0.1.6]: https://github.com/socratic-irony/zotero-snowball/compare/v0.1.3...v0.1.6

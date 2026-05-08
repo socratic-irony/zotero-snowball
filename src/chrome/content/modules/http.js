@@ -80,18 +80,27 @@ var SnowballHTTP = {
   },
 
   /**
-   * GET JSON with retries, timeout, and abort plumbing.
+   * Issue a JSON request with retries, timeout, and abort plumbing.
+   *
+   * Defaults to GET. Pass `method: "POST"` + `body` for POSTs. Retries
+   * apply to POSTs the same as GETs — only call this for idempotent POST
+   * endpoints (e.g. read-only batch lookups like Semantic Scholar's
+   * /paper/batch).
    *
    * @param {URL|string} url
    * @param {object} [opts]
+   * @param {string}      [opts.method="GET"]
+   * @param {string|null} [opts.body]   raw request body (already serialized)
    * @param {AbortSignal} [opts.signal]
-   * @param {object} [opts.headers]
-   * @param {number}  [opts.timeoutMs]
-   * @param {number}  [opts.maxRetries]
+   * @param {object}      [opts.headers]
+   * @param {number}      [opts.timeoutMs]
+   * @param {number}      [opts.maxRetries]
    */
   async fetchJSON(url, opts = {}) {
     const safeURL = this.assertSafeURL(url);
     const {
+      method = "GET",
+      body = null,
       signal = null,
       headers = {},
       timeoutMs = this.DEFAULT_TIMEOUT_MS,
@@ -110,11 +119,12 @@ var SnowballHTTP = {
       let response;
       try {
         response = await fetch(safeURL.toString(), {
-          method: "GET",
+          method,
           headers: Object.assign(
             { "Accept": "application/json" },
             headers
           ),
+          body: (body !== null && body !== undefined) ? body : undefined,
           credentials: "omit",
           redirect: "follow",
           signal: composed.signal

@@ -149,7 +149,8 @@ test("OpenAlex provider normalizes, reconstructs, and deduplicates candidates", 
 });
 
 test("ranking prefers overlapping new candidates and penalizes existing duplicates", () => {
-  const { SnowballRanking } = loadModules(["ranking.js"]);
+  // ranking.js depends on SnowballUtil for trigrams/jaccard/normalizeAuthorName
+  const { SnowballRanking } = loadModules(["util.js", "ranking.js"]);
   const seedRecords = [{
     title: "Citation snowball systematic review",
     abstract: "Evidence synthesis and citation chasing for research discovery"

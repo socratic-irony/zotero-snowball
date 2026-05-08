@@ -162,6 +162,9 @@ var SnowballSourcesPlugin = class {
 
       const providerConfig = {
         apiKey: this.prefStr("openAlexAPIKey", ""),
+        // Semantic Scholar enrichment is opt-in: empty key disables it
+        // entirely (no S2 traffic will be initiated by the dialog).
+        semanticScholarAPIKey: this.prefStr("semanticScholarAPIKey", ""),
         maxForwardPerSeed:  this.prefInt("maxForwardPerSeed",  100, 0, 1000),
         maxBackwardPerSeed: this.prefInt("maxBackwardPerSeed", 100, 0, 1000),
         maxCandidatesTotal: this.prefInt("maxCandidatesTotal", 500, 1, 10000),

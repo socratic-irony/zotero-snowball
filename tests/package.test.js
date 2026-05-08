@@ -71,6 +71,7 @@ test("review dialog asset references resolve inside the XPI source tree", () => 
     "chrome://snowball-sources/content/modules/util.js",
     "chrome://snowball-sources/content/modules/ranking.js",
     "chrome://snowball-sources/content/modules/openalex.js",
+    "chrome://snowball-sources/content/modules/semanticscholar.js",
     "chrome://snowball-sources/content/modules/zoteroItems.js"
   ].sort());
 

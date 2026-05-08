@@ -3,10 +3,17 @@ var SnowballDialog = {
   candidates: [],
   // dedupe key -> candidate (kept in sync with this.candidates)
   dedupeIndex: new Map(),
+  // year-bucket index for fuzzy trigram dedupe (catches paraphrased titles)
+  yearBuckets: new Map(),
+  // Trigram-Jaccard threshold above which two same-year candidates count as duplicates
+  TRIGRAM_DEDUPE_THRESHOLD: 0.85,
   abortController: null,
   loading: false,
   pendingRefresh: null,
-  seedVector: null,
+  // Resolved seed Works (from OpenAlex) accumulated as `seed-resolved` events arrive.
+  seedWorks: [],
+  // Built/rebuilt from (seedRecords, seedWorks) — input to scoreCandidate.
+  seedContext: null,
   state: {
     filter: "",
     direction: "all",
@@ -46,6 +53,9 @@ var SnowballDialog = {
     this.args = args || {};
     this.candidates = [];
     this.dedupeIndex = new Map();
+    this.yearBuckets = new Map();
+    this.seedWorks = [];
+    this.seedContext = null;
 
     this.bindControls();
     this.initSplitter();
@@ -68,9 +78,12 @@ var SnowballDialog = {
     // Streaming mode: drive the OpenAlex provider ourselves so the user
     // sees results as they arrive and can cancel mid-flight.
     if (Array.isArray(this.args.seeds) && this.args.seeds.length) {
-      this.seedVector = (typeof SnowballRanking !== "undefined")
-        ? SnowballRanking.buildSeedVector(this.args.seeds)
-        : null;
+      // Pre-build the seed context from text-only signals so candidates
+      // arriving before the first `seed-resolved` event still get scored
+      // sensibly. Once seed Works arrive we rebuild with full signals.
+      if (typeof SnowballRanking !== "undefined") {
+        this.seedContext = SnowballRanking.buildSeedContext(this.args.seeds, []);
+      }
       this.startStreaming();
     } else {
       this.setStatus("No seed items provided.");
@@ -122,6 +135,20 @@ var SnowballDialog = {
           continue;
         }
 
+        if (event.type === "seed-resolved") {
+          // Accumulate the resolved Work and rebuild the seed context so
+          // bibliographic-coupling / co-citation / author-overlap signals
+          // become available as soon as a single seed resolves. Cheap
+          // (≤ a few seeds × small sets).
+          if (event.work) this.seedWorks.push(event.work);
+          if (typeof SnowballRanking !== "undefined") {
+            this.seedContext = SnowballRanking.buildSeedContext(
+              this.args.seeds, this.seedWorks
+            );
+          }
+          continue;
+        }
+
         if (event.type === "candidate") {
           if (added >= maxTotal) {
             this.abortController.abort();
@@ -137,10 +164,33 @@ var SnowballDialog = {
       }
     } catch (error) {
       if (error?.name !== "AbortError") {
-        try { Zotero?.debug?.(`Snowball stream failed: ${error?.stack || error}`); }
-        catch (_) { /* ignore */ }
+        try {
+          if (typeof SnowballLog !== "undefined") {
+            SnowballLog.error("stream failed", { error: SnowballLog.formatError(error) });
+          } else {
+            Zotero?.debug?.(`Snowball stream failed: ${error?.stack || error}`);
+          }
+        } catch (_) { /* ignore */ }
       }
     } finally {
+      this.flushRefresh();
+      // After the OpenAlex stream finishes (or is canceled), optionally
+      // refine scores with Semantic Scholar SPECTER2 embeddings — but
+      // ONLY if the user provided an S2 API key. No key, no S2 traffic.
+      if (!signal.aborted) {
+        try {
+          await this.refineWithSemanticScholar();
+        } catch (error) {
+          if (error?.name !== "AbortError") {
+            try {
+              if (typeof SnowballLog !== "undefined") {
+                SnowballLog.warn("S2 refinement failed", { error: SnowballLog.formatError(error) });
+              }
+            } catch (_) { /* ignore */ }
+          }
+        }
+      }
+
       this.setLoading(false);
       this.flushRefresh();
       const total = this.candidates.length;
@@ -159,6 +209,85 @@ var SnowballDialog = {
     }
   },
 
+  /**
+   * Optional post-stream pass: ask Semantic Scholar for SPECTER2
+   * embeddings for the seeds and the deduped candidates, compute the
+   * seed centroid, score each candidate by cosine to the centroid, and
+   * re-run the composite scorer with the new signal mixed in.
+   *
+   * Activated only when an S2 API key is set in prefs. Failure is
+   * non-fatal: existing scores stay; a warning lands in the debug log.
+   */
+  async refineWithSemanticScholar() {
+    const key = this.args.providerConfig?.semanticScholarAPIKey;
+    if (!key) return;
+    if (typeof SemanticScholarProvider === "undefined") return;
+    if (!this.candidates.length || !this.seedContext) return;
+
+    const signal = this.abortController?.signal || null;
+    const s2 = new SemanticScholarProvider({
+      apiKey: key,
+      timeoutMs: this.args.providerConfig?.timeoutMs || 60000
+    });
+    if (!s2.isEnabled()) return;
+
+    this.setStatus("Refining with Semantic Scholar…");
+    this.setProgress("Fetching SPECTER2 embeddings…");
+
+    const seedDois = (this.args.seeds || []).map(s => s?.doi).filter(Boolean);
+    const candDois = this.candidates.map(c => c?.doi).filter(Boolean);
+    if (!seedDois.length || !candDois.length) {
+      this.setProgress("Semantic Scholar: not enough DOIs for refinement; keeping baseline scores.");
+      return;
+    }
+
+    let seedEmbeds, candEmbeds;
+    try {
+      [seedEmbeds, candEmbeds] = await Promise.all([
+        s2.fetchEmbeddings(seedDois, signal),
+        s2.fetchEmbeddings(candDois, signal)
+      ]);
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      throw error;
+    }
+
+    if (!seedEmbeds.size || !candEmbeds.size) {
+      this.setProgress("Semantic Scholar returned no embeddings; keeping baseline scores.");
+      return;
+    }
+
+    // Seed centroid (mean vector across resolved seed embeddings).
+    const seedVecs = Array.from(seedEmbeds.values());
+    const dim = seedVecs[0].length;
+    const centroid = new Float32Array(dim);
+    for (const v of seedVecs) {
+      for (let i = 0; i < dim; i++) centroid[i] += v[i];
+    }
+    for (let i = 0; i < dim; i++) centroid[i] /= seedVecs.length;
+
+    // Apply embedding similarity to each candidate that has a vector.
+    let enriched = 0;
+    for (const c of this.candidates) {
+      const doi = String(c.doi || "").trim().toLowerCase()
+        .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
+        .replace(/^doi:/i, "");
+      const v = doi ? candEmbeds.get(doi) : null;
+      if (!v) continue;
+      c._embeddingSimilarity = SnowballUtil.cosineDense(centroid, v);
+      enriched++;
+    }
+
+    // Re-run the composite scorer so the embedding signal is mixed in.
+    if (typeof SnowballRanking !== "undefined" && this.seedContext) {
+      for (const c of this.candidates) {
+        SnowballRanking.scoreCandidate(c, this.seedContext);
+      }
+    }
+
+    this.setProgress(`Refined ${enriched} of ${this.candidates.length} candidate${this.candidates.length === 1 ? "" : "s"} with Semantic Scholar`);
+  },
+
   stop() {
     if (this.abortController && !this.abortController.signal.aborted) {
       this.loadingWasCanceled = true;
@@ -174,36 +303,48 @@ var SnowballDialog = {
    * Returns true if the candidate was new (vs. a merge into an existing one).
    */
   async ingestCandidate(raw, { libraryID = null, skipExisting = true, skipScore = false } = {}) {
+    // Fast-path: exact dedupe by DOI / OpenAlex ID / normalized title+year.
     const key = this.dedupeKey(raw);
-
     if (key && this.dedupeIndex.has(key)) {
-      const existing = this.dedupeIndex.get(key);
-      if (existing.direction !== raw.direction && raw.direction) {
-        existing.direction = "both";
-      }
-      existing.citedByCount = Math.max(
-        existing.citedByCount || 0,
-        raw.citedByCount || 0
-      );
-      if (!existing.abstract && raw.abstract) existing.abstract = raw.abstract;
-      if (!existing.venue && raw.venue) existing.venue = raw.venue;
+      this.mergeDuplicate(this.dedupeIndex.get(key), raw);
       return false;
+    }
+
+    // Fuzzy fallback: catch paraphrased duplicates ("Attention Is All You
+    // Need" vs "Attention is All You Need: …") that exact-key dedupe
+    // misses. Only compare within the same year-bucket to keep this O(N)
+    // overall instead of O(N²) across the full candidate set.
+    const candTrigrams = (typeof SnowballUtil !== "undefined")
+      ? SnowballUtil.trigrams(raw.title || "")
+      : new Set();
+    if (candTrigrams.size) {
+      const fuzzy = this.findFuzzyDuplicate(raw, candTrigrams);
+      if (fuzzy) {
+        this.mergeDuplicate(fuzzy, raw);
+        return false;
+      }
     }
 
     const candidate = Object.assign({}, raw);
     candidate._index = this.candidates.length;
-    candidate._selected = true;
+    candidate._titleTrigrams = candTrigrams;
 
     if (libraryID && typeof SnowballZoteroItems !== "undefined") {
       try {
         await SnowballZoteroItems.markExistingCandidate(candidate, libraryID);
       } catch (error) {
-        try { Zotero?.debug?.(`markExistingCandidate failed: ${error}`); } catch (_) {}
+        try {
+          if (typeof SnowballLog !== "undefined") {
+            SnowballLog.warn("markExistingCandidate failed", { error: SnowballLog.formatError(error) });
+          } else {
+            Zotero?.debug?.(`markExistingCandidate failed: ${error}`);
+          }
+        } catch (_) { /* ignore */ }
       }
     }
 
-    if (!skipScore && this.seedVector && typeof SnowballRanking !== "undefined") {
-      SnowballRanking.scoreCandidate(candidate, this.seedVector);
+    if (!skipScore && this.seedContext && typeof SnowballRanking !== "undefined") {
+      SnowballRanking.scoreCandidate(candidate, this.seedContext);
     }
 
     if (candidate.alreadyInLibrary && skipExisting) {
@@ -213,8 +354,53 @@ var SnowballDialog = {
     }
 
     if (key) this.dedupeIndex.set(key, candidate);
+    // Add to year bucket for the trigram fallback. Year-less candidates
+    // share a single "_no_year_" bucket; comparison cost there is bounded
+    // by maxCandidatesTotal and titles are short enough that Jaccard is
+    // negligible per pair.
+    const bucketKey = candidate.year != null ? String(candidate.year) : "_no_year_";
+    if (!this.yearBuckets.has(bucketKey)) this.yearBuckets.set(bucketKey, []);
+    this.yearBuckets.get(bucketKey).push(candidate);
+
     this.candidates.push(candidate);
     return true;
+  },
+
+  /**
+   * Merge `raw` into `existing` (an already-stored candidate). Any field
+   * upgrade we want to do on dedupe lives here so both the exact and
+   * fuzzy paths share semantics.
+   */
+  mergeDuplicate(existing, raw) {
+    if (existing.direction !== raw.direction && raw.direction) {
+      existing.direction = "both";
+    }
+    existing.citedByCount = Math.max(
+      existing.citedByCount || 0,
+      raw.citedByCount || 0
+    );
+    if (!existing.abstract && raw.abstract) existing.abstract = raw.abstract;
+    if (!existing.venue && raw.venue) existing.venue = raw.venue;
+    if (!existing.doi && raw.doi) existing.doi = raw.doi;
+    if (!Array.isArray(existing.referencedWorks) || !existing.referencedWorks.length) {
+      if (Array.isArray(raw.referencedWorks) && raw.referencedWorks.length) {
+        existing.referencedWorks = raw.referencedWorks;
+      }
+    }
+  },
+
+  findFuzzyDuplicate(raw, candTrigrams) {
+    if (typeof SnowballUtil === "undefined") return null;
+    const bucketKey = raw.year != null ? String(raw.year) : "_no_year_";
+    const bucket = this.yearBuckets.get(bucketKey);
+    if (!bucket || !bucket.length) return null;
+    for (const existing of bucket) {
+      const existingTri = existing._titleTrigrams;
+      if (!existingTri || !existingTri.size) continue;
+      const j = SnowballUtil.jaccardSets(existingTri, candTrigrams);
+      if (j >= this.TRIGRAM_DEDUPE_THRESHOLD) return existing;
+    }
+    return null;
   },
 
   dedupeKey(candidate) {
