@@ -183,6 +183,27 @@ test("scoreCandidate rewards near-duplicate titles via trigram Jaccard", () => {
   assert.ok(unrelated._scoreBreakdown.titleTrigram < 0.2);
 });
 
+test("buildSeedContext + scoreCandidate honor user-supplied weight overrides", () => {
+  const { SnowballRanking } = makeRanking();
+  const seeds = [{ title: "x", abstract: "" }];
+
+  // Default weights: embedding contributes when present.
+  const defaultCtx = SnowballRanking.buildSeedContext(seeds, []);
+  // Custom weights: zero out the embedding weight entirely.
+  const noEmbedCtx = SnowballRanking.buildSeedContext(seeds, [], {
+    weights: { embedding: 0 }
+  });
+
+  const cand = () => ({ title: "p", authors: [], citedByCount: 0, _embeddingSimilarity: 0.9 });
+  const a = cand();
+  const b = cand();
+  SnowballRanking.scoreCandidate(a, defaultCtx);
+  SnowballRanking.scoreCandidate(b, noEmbedCtx);
+  // With embedding zeroed, the score should drop below the default-weight one.
+  assert.ok(a.relevanceScore > b.relevanceScore,
+    `expected default-weights score (${a.relevanceScore}) > zero-embedding-weights score (${b.relevanceScore})`);
+});
+
 test("scoreCandidate mixes embedding similarity when present", () => {
   const { SnowballRanking } = makeRanking();
   const seeds = [{ title: "x", abstract: "" }];

@@ -6,8 +6,8 @@
   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
   xmlns:html="http://www.w3.org/1999/xhtml"
   title="Snowball Sources Preferences"
-  width="520"
-  height="520"
+  width="600"
+  height="720"
   onload="SnowballPrefs.onLoad(window.arguments[0])">
 
   <script src="chrome://snowball-sources/content/modules/log.js"/>
@@ -75,6 +75,28 @@
         <html:span class="label">Max total candidates</html:span>
         <html:input id="pref-maxCandidatesTotal" type="number" min="1" max="10000"/>
       </html:label>
+
+      <html:label class="row">
+        <html:span class="label">Default min cited-by count</html:span>
+        <html:input id="pref-minCitedBy" type="number" min="0" max="100000"/>
+      </html:label>
+    </html:section>
+
+    <html:section>
+      <html:h2>Score weights</html:h2>
+      <html:p class="hint">
+        Each signal contributes to a candidate's relevance score. Increase a
+        weight to make that signal matter more. Range 0.00–2.00; defaults
+        shown in parentheses are tuned for the typical "follow a research
+        thread" use case.
+      </html:p>
+
+      <html:div id="snowball-weight-controls" class="snowball-weights"/>
+
+      <html:div class="row" style="justify-content: flex-end">
+        <html:button type="button" id="snowball-weights-reset"
+                     onclick="SnowballPrefs.resetWeights()">Reset to defaults</html:button>
+      </html:div>
     </html:section>
 
     <html:div id="snowball-prefs-confirm" class="snowball-prefs-confirm" hidden="hidden" role="alert">

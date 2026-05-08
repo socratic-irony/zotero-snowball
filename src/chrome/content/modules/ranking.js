@@ -54,7 +54,7 @@ var SnowballRanking = {
    * rebuilds this on every `seed-resolved` event so partial seed
    * resolution still produces useful scores.
    */
-  buildSeedContext(seedRecords, seedWorks = []) {
+  buildSeedContext(seedRecords, seedWorks = [], opts = {}) {
     const records = Array.isArray(seedRecords) ? seedRecords : [];
     const works = Array.isArray(seedWorks) ? seedWorks : [];
 
@@ -95,8 +95,25 @@ var SnowballRanking = {
       refsMultiplicity,
       authorSet,
       titleTrigrams,
-      seedCount: records.length
+      seedCount: records.length,
+      // Per-context weight override. Caller can pass user-customized
+      // values from prefs; missing entries fall back to the defaults.
+      weights: opts && opts.weights ? this._mergeWeights(opts.weights) : null
     };
+  },
+
+  /**
+   * Public: take a partial map (e.g. {text: 1.2, embedding: 0}) and return
+   * the full WEIGHTS object with overrides applied. Used by both the
+   * context builder and tests.
+   */
+  _mergeWeights(overrides) {
+    const out = {};
+    for (const k of Object.keys(this.WEIGHTS)) {
+      const v = Number(overrides?.[k]);
+      out[k] = Number.isFinite(v) && v >= 0 ? v : this.WEIGHTS[k];
+    }
+    return out;
   },
 
   buildSeedVector(seedRecords) {
@@ -181,7 +198,10 @@ var SnowballRanking = {
     const duplicatePenalty = candidate.alreadyInLibrary ? -0.35 : 0;
     const directionBoost   = candidate.direction === "both" ? 0.1 : 0;
 
-    const W = this.WEIGHTS;
+    // Honor per-context weight overrides if the caller supplied them
+    // (the dialog passes weights from prefs); otherwise use the tuned
+    // module defaults.
+    const W = (ctx && ctx.weights) ? ctx.weights : this.WEIGHTS;
     const composite =
       W.text          * text +
       W.bibCoupling   * bibCoupling +

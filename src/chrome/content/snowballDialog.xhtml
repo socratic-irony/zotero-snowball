@@ -5,6 +5,7 @@
 <window
   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
   xmlns:html="http://www.w3.org/1999/xhtml"
+  xmlns:svg="http://www.w3.org/2000/svg"
   title="Snowball Sources"
   width="1200"
   height="780"
@@ -50,6 +51,29 @@
       <html:label class="snowball-toggle">
         <html:input id="snowball-hide-existing" type="checkbox"/>
         <html:span>Hide items already in library</html:span>
+      </html:label>
+    </hbox>
+
+    <hbox align="center" class="snowball-subtoolbar">
+      <html:div id="snowball-year-filter" class="snowball-year-filter" hidden="hidden">
+        <html:span class="snowball-year-label">Years</html:span>
+        <svg:svg id="snowball-year-svg"
+                  width="320" height="42" class="snowball-year-svg"
+                  preserveAspectRatio="none">
+          <svg:g id="snowball-year-bars"/>
+          <svg:rect id="snowball-year-band" class="snowball-year-band" x="0" y="0" width="0" height="40"/>
+          <svg:line id="snowball-year-handle-min" class="snowball-year-handle" x1="0" y1="0" x2="0" y2="42"/>
+          <svg:line id="snowball-year-handle-max" class="snowball-year-handle" x1="0" y1="0" x2="0" y2="42"/>
+        </svg:svg>
+        <html:span id="snowball-year-readout" class="snowball-year-readout"></html:span>
+        <html:button type="button" id="snowball-year-reset"
+                     class="snowball-year-reset"
+                     title="Reset year range">Reset</html:button>
+      </html:div>
+      <spacer flex="1"/>
+      <html:label class="snowball-toggle snowball-mincites">
+        <html:span>Min cites</html:span>
+        <html:input id="snowball-mincites-input" type="number" min="0" step="1" class="snowball-mincites-input"/>
       </html:label>
     </hbox>
 

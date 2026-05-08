@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] – 2026-05-08
+
+### Added — review dialog
+- **Year-range histogram** in a new sub-toolbar below the main filter row.
+  Inline SVG bar chart of candidates-per-year with two draggable handles
+  for brushing a range. The histogram self-hides until at least two
+  distinct years are present, re-renders on every refresh, and a Reset
+  button restores the full range.
+- **Min cited-by filter** in the sub-toolbar — runtime numeric input
+  that hides candidates below the threshold. Default seeded from a new
+  `extensions.snowballSources.minCitedBy` pref (also bounded in the
+  prefs UI).
+- **Score-cell tooltip**: hovering any score badge now shows a
+  per-signal breakdown (text, bib coupling with raw count, co-citation
+  with seed-hit count, author overlap, title fuzzy, citation, S2
+  embedding, plus any active penalties/bonuses). Pulled from the
+  `_scoreBreakdown` already stored on each candidate.
+- **Clickable DOI / OpenAlex link** in the details pane. Uses
+  `Zotero.launchURL` so the link opens in the user's external browser
+  (per Zotero's UX rules) rather than inside the chrome dialog.
+- **Window-state persistence**: window size + splitter offset are saved
+  to `extensions.snowballSources.uiState` (debounced on resize, written
+  on splitter drag-end and on dialog unload) and restored next time the
+  dialog opens.
+
+### Added — preferences
+- **Score weight sliders** for all 7 signals (text, bibliographic
+  coupling, co-citation, author overlap, title fuzzy match, citation,
+  Semantic Scholar embedding). Range 0.00–2.00, step 0.05. Defaults
+  shown in the label; live numeric readout to the right; "Reset to
+  defaults" button.
+- **Default min cited-by** pref input (0–100000).
+
+### Changed
+- `SnowballRanking.buildSeedContext()` now accepts an `{weights}` option
+  bag. The dialog reads the user's per-signal weight prefs and threads
+  them through the seed context so re-runs after changing weights take
+  effect immediately on the next snowball.
+- Preferences dialog grew from 520×520 to 600×720 to fit the new
+  sliders.
+
+### Tests
+- Added a test covering custom weight overrides through `buildSeedContext`.
+  47/47 passing.
+
 ## [0.3.1] – 2026-05-08
 
 ### Changed
@@ -173,7 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.0...v0.2.1

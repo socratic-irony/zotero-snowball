@@ -172,6 +172,19 @@ var SnowballSourcesPlugin = class {
         includeForward:     this.prefBool("includeForward",   true),
         includeBackward:    this.prefBool("includeBackward",  true)
       };
+      // Custom score weights from prefs (defaults match the module's
+      // tuned values). Each weight is clamped to [0, 2] so a malformed
+      // pref can't push it negative or astronomically large.
+      const weightDefaults = {
+        text: 1.00, bibCoupling: 0.20, coCitation: 0.15,
+        authorOverlap: 0.10, titleTrigram: 0.08, citation: 0.10,
+        embedding: 0.40
+      };
+      const weights = {};
+      for (const [k, def] of Object.entries(weightDefaults)) {
+        const raw = Number(this.pref(`weights.${k}`, def));
+        weights[k] = Number.isFinite(raw) ? Math.max(0, Math.min(2, raw)) : def;
+      }
       // Refuse to launch with an entirely empty fetch scope.
       if (!providerConfig.includeForward && !providerConfig.includeBackward) {
         this.alert("Both forward and backward citations are disabled in preferences. Enable at least one to snowball.");
@@ -182,9 +195,12 @@ var SnowballSourcesPlugin = class {
         seeds: seedRecords,
         target,
         providerConfig,
+        weights,
         flags: {
-          skipAlreadyInLibrary: this.prefBool("skipAlreadyInLibrary", true)
-        }
+          skipAlreadyInLibrary: this.prefBool("skipAlreadyInLibrary", true),
+          minCitedBy:           this.prefInt("minCitedBy", 0, 0, 100000)
+        },
+        uiState: this._readUIState()
       });
     } catch (error) {
       try {
@@ -284,6 +300,39 @@ var SnowballSourcesPlugin = class {
         }
       } catch (_) { /* ignore */ }
       throw error;
+    }
+  }
+
+  // ---------- UI state persistence ---------------------------------------
+  // The dialog hands back its window size + splitter offset on close so
+  // we can restore them on the next open. JSON-encoded into a single
+  // pref to keep the schema small.
+
+  _readUIState() {
+    try {
+      const raw = this.prefStr("uiState", "");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch (_) { /* ignore */ }
+    return null;
+  }
+
+  saveUIState(state) {
+    try {
+      if (!state || typeof state !== "object") return;
+      // Drop any non-finite numbers so a runtime glitch can't poison the pref.
+      const clean = {};
+      for (const [k, v] of Object.entries(state)) {
+        if (typeof v === "number" && Number.isFinite(v)) clean[k] = v;
+      }
+      this.setPref("uiState", JSON.stringify(clean));
+    } catch (error) {
+      try {
+        if (typeof SnowballLog !== "undefined") {
+          SnowballLog.warn("uiState save failed", { error: SnowballLog.formatError(error) });
+        }
+      } catch (_) { /* ignore */ }
     }
   }
 

@@ -18,9 +18,15 @@ var SnowballDialog = {
     filter: "",
     direction: "all",
     hideExisting: false,
+    minCitedBy: 0,
+    // null means "no constraint" — set by the histogram brush.
+    yearMin: null,
+    yearMax: null,
     sort: { key: "relevanceScore", dir: "desc" },
     selectedIndex: -1
   },
+  // Reference to the resolved provider weights, passed through to ranking.
+  weights: null,
 
   // ---------- Lifecycle -----------------------------------------------------
 
@@ -56,9 +62,14 @@ var SnowballDialog = {
     this.yearBuckets = new Map();
     this.seedWorks = [];
     this.seedContext = null;
+    this.weights = (this.args.weights && typeof this.args.weights === "object")
+      ? this.args.weights : null;
+    this.state.minCitedBy = Number.isFinite(this.args.flags?.minCitedBy)
+      ? Math.max(0, this.args.flags.minCitedBy) : 0;
 
     this.bindControls();
     this.initSplitter();
+    this.applyUIState(this.args.uiState);
     this.refresh();
 
     // Pre-loaded mode (used by tests / future caller that already has
@@ -82,7 +93,9 @@ var SnowballDialog = {
       // arriving before the first `seed-resolved` event still get scored
       // sensibly. Once seed Works arrive we rebuild with full signals.
       if (typeof SnowballRanking !== "undefined") {
-        this.seedContext = SnowballRanking.buildSeedContext(this.args.seeds, []);
+        this.seedContext = SnowballRanking.buildSeedContext(
+          this.args.seeds, [], { weights: this.weights }
+        );
       }
       this.startStreaming();
     } else {
@@ -143,7 +156,7 @@ var SnowballDialog = {
           if (event.work) this.seedWorks.push(event.work);
           if (typeof SnowballRanking !== "undefined") {
             this.seedContext = SnowballRanking.buildSeedContext(
-              this.args.seeds, this.seedWorks
+              this.args.seeds, this.seedWorks, { weights: this.weights }
             );
           }
           continue;
@@ -480,6 +493,20 @@ var SnowballDialog = {
         this.refresh();
       });
 
+    // Min-cites runtime input (default seeded from prefs).
+    const minCitesInput = document.getElementById("snowball-mincites-input");
+    if (minCitesInput) {
+      minCitesInput.value = String(this.state.minCitedBy || 0);
+      minCitesInput.addEventListener("input", event => {
+        const n = Number(event.target.value);
+        this.state.minCitedBy = Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+        this.refresh();
+      });
+    }
+
+    // Year-range histogram (interaction is owned by initYearHistogram).
+    this.initYearHistogram();
+
     document.getElementById("snowball-select-all")
       .addEventListener("change", event => {
         const visible = this.getVisibleCandidates();
@@ -536,12 +563,72 @@ var SnowballDialog = {
       }
     });
 
+    // Persist window size on resize end (debounced via rAF), and again on
+    // unload so a Cmd-W close still saves the latest dimensions.
+    window.addEventListener("resize", () => this._scheduleUIStateSave());
+
     // Cancel any in-flight stream when the user closes the window.
     window.addEventListener("unload", () => {
       if (this.abortController && !this.abortController.signal.aborted) {
         try { this.abortController.abort(); } catch (_) { /* ignore */ }
       }
+      // Final write before the window dies — synchronous so the prefs
+      // hit disk before we're gone.
+      try { this._saveUIStateNow(); } catch (_) { /* ignore */ }
     });
+  },
+
+  // ---------- UI state persistence ----------------------------------------
+
+  applyUIState(state) {
+    if (!state || typeof state !== "object") return;
+    try {
+      if (Number.isFinite(state.width) && Number.isFinite(state.height)) {
+        const w = Math.max(900,  Math.min(3000, state.width));
+        const h = Math.max(520,  Math.min(3000, state.height));
+        // Defer to next tick so the dialog has finished its initial layout
+        // before we resize it (some Mozilla builds ignore resizeTo() called
+        // during onload).
+        setTimeout(() => {
+          try { window.resizeTo(w, h); } catch (_) { /* ignore */ }
+        }, 0);
+      }
+      if (Number.isFinite(state.detailsWidth)) {
+        const dw = Math.max(240, Math.min(2000, state.detailsWidth));
+        document.documentElement.style.setProperty(
+          "--snowball-details-width", `${Math.round(dw)}px`
+        );
+      }
+    } catch (_) { /* ignore */ }
+  },
+
+  _scheduleUIStateSave() {
+    if (this._uiStateTimer) clearTimeout(this._uiStateTimer);
+    this._uiStateTimer = setTimeout(() => {
+      this._uiStateTimer = null;
+      this._saveUIStateNow();
+    }, 250);
+  },
+
+  _saveUIStateNow() {
+    try {
+      const detailsRoot = document.getElementById("snowball-details");
+      const detailsWidth = detailsRoot
+        ? Math.round(detailsRoot.getBoundingClientRect().width)
+        : null;
+      const state = {
+        width:        Math.round(window.outerWidth || 0),
+        height:       Math.round(window.outerHeight || 0),
+        detailsWidth: detailsWidth || 0
+      };
+      // Hand off to the controller. Going via args.plugin keeps prefs
+      // writes scoped to a single owner regardless of how many dialogs
+      // are open.
+      const plugin = this.args && this.args.plugin;
+      if (plugin && typeof plugin.saveUIState === "function") {
+        plugin.saveUIState(state);
+      }
+    } catch (_) { /* ignore */ }
   },
 
   initSplitter() {
@@ -581,6 +668,9 @@ var SnowballDialog = {
       if (!dragging) return;
       dragging = false;
       splitter.classList.remove("dragging");
+      // Persist the splitter offset on drag end (not during) so we don't
+      // hammer the prefs file on every mousemove.
+      this._scheduleUIStateSave();
     };
 
     splitter.addEventListener("mousedown", onDown);
@@ -612,6 +702,137 @@ var SnowballDialog = {
     }
   },
 
+  // ---------- Year-range histogram --------------------------------------
+  //
+  // Renders a tiny SVG bar chart of candidates-per-year and a brushable
+  // range with two draggable handles. State lives on `state.yearMin` /
+  // `state.yearMax`; getVisibleCandidates() applies the filter.
+  //
+  // The histogram remains hidden until at least one candidate has a year,
+  // and re-renders whenever refresh() does so it stays in sync with the
+  // streaming results without us needing to wire individual updates.
+
+  initYearHistogram() {
+    const svg = document.getElementById("snowball-year-svg");
+    if (!svg) return;
+
+    const handleMin = document.getElementById("snowball-year-handle-min");
+    const handleMax = document.getElementById("snowball-year-handle-max");
+    if (!handleMin || !handleMax) return;
+
+    let dragging = null;     // "min" | "max" | null
+
+    const onDown = which => event => {
+      if (event.button !== 0) return;
+      dragging = which;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const onMove = event => {
+      if (!dragging) return;
+      const meta = this._yearHistogramMeta;
+      if (!meta || meta.range <= 0) return;
+      const rect = svg.getBoundingClientRect();
+      const x = Math.max(0, Math.min(meta.width, event.clientX - rect.left));
+      const year = Math.round(meta.minYear + (x / meta.width) * meta.range);
+      if (dragging === "min") {
+        this.state.yearMin = Math.min(year, this.state.yearMax ?? meta.maxYear);
+      } else {
+        this.state.yearMax = Math.max(year, this.state.yearMin ?? meta.minYear);
+      }
+      this.scheduleRefresh();
+    };
+
+    const onUp = () => { dragging = null; };
+
+    handleMin.addEventListener("mousedown", onDown("min"));
+    handleMax.addEventListener("mousedown", onDown("max"));
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+
+    document.getElementById("snowball-year-reset")
+      ?.addEventListener("click", () => {
+        this.state.yearMin = null;
+        this.state.yearMax = null;
+        this.refresh();
+      });
+  },
+
+  renderYearHistogram() {
+    const wrapper = document.getElementById("snowball-year-filter");
+    const svg = document.getElementById("snowball-year-svg");
+    const barsGroup = document.getElementById("snowball-year-bars");
+    const readout = document.getElementById("snowball-year-readout");
+    const handleMin = document.getElementById("snowball-year-handle-min");
+    const handleMax = document.getElementById("snowball-year-handle-max");
+    const band = document.getElementById("snowball-year-band");
+    if (!wrapper || !svg || !barsGroup || !readout || !handleMin || !handleMax || !band) return;
+
+    // Bin candidates by year (skip null/0).
+    const counts = new Map();
+    for (const c of this.candidates) {
+      const y = Number(c.year);
+      if (!Number.isFinite(y) || y === 0) continue;
+      counts.set(y, (counts.get(y) || 0) + 1);
+    }
+
+    if (counts.size < 2) {
+      // Hide the filter until there's enough data to brush over.
+      wrapper.setAttribute("hidden", "hidden");
+      this._yearHistogramMeta = null;
+      return;
+    }
+    wrapper.removeAttribute("hidden");
+
+    const years = Array.from(counts.keys()).sort((a, b) => a - b);
+    const minYear = years[0];
+    const maxYear = years[years.length - 1];
+    const range = Math.max(1, maxYear - minYear);
+    let maxCount = 0;
+    for (const v of counts.values()) if (v > maxCount) maxCount = v;
+
+    const width = Number(svg.getAttribute("width")) || 320;
+    const innerHeight = 32;
+
+    // Wipe the existing bars; render one per year present.
+    barsGroup.replaceChildren();
+    const NS = "http://www.w3.org/2000/svg";
+    const barWidth = Math.max(1, Math.floor(width / (range + 1)) - 1);
+    for (const [year, count] of counts) {
+      const xRatio = (year - minYear) / range;
+      const x = Math.round(xRatio * (width - barWidth));
+      const h = Math.max(1, Math.round((count / maxCount) * innerHeight));
+      const rect = document.createElementNS(NS, "rect");
+      rect.setAttribute("x", String(x));
+      rect.setAttribute("y", String(innerHeight - h));
+      rect.setAttribute("width", String(barWidth));
+      rect.setAttribute("height", String(h));
+      rect.setAttribute("class", "snowball-year-bar");
+      rect.setAttribute("data-year", String(year));
+      barsGroup.appendChild(rect);
+    }
+
+    // Handle positions — clamp to current data, NULL means "at the edge".
+    const lo = Number.isFinite(this.state.yearMin) ? this.state.yearMin : minYear;
+    const hi = Number.isFinite(this.state.yearMax) ? this.state.yearMax : maxYear;
+    const xMin = Math.round(((lo - minYear) / range) * width);
+    const xMax = Math.round(((hi - minYear) / range) * width);
+
+    handleMin.setAttribute("x1", String(xMin)); handleMin.setAttribute("x2", String(xMin));
+    handleMax.setAttribute("x1", String(xMax)); handleMax.setAttribute("x2", String(xMax));
+    band.setAttribute("x", String(Math.min(xMin, xMax)));
+    band.setAttribute("width", String(Math.abs(xMax - xMin)));
+
+    // Readout reflects active brush vs. full range.
+    const usingFull = !Number.isFinite(this.state.yearMin) && !Number.isFinite(this.state.yearMax);
+    readout.textContent = usingFull
+      ? `${minYear}–${maxYear}`
+      : `${lo}–${hi} (of ${minYear}–${maxYear})`;
+
+    this._yearHistogramMeta = { width, minYear, maxYear, range };
+  },
+
   getVisibleCandidates() {
     let list = this.candidates;
 
@@ -632,6 +853,25 @@ var SnowballDialog = {
         this.formatAuthors(c, 99).toLowerCase().includes(query) ||
         (c.venue || "").toLowerCase().includes(query)
       );
+    }
+
+    // Min cited-by — drop candidates below the threshold. citedByCount of
+    // 0 is allowed to pass when minCitedBy is 0.
+    if (this.state.minCitedBy > 0) {
+      const min = this.state.minCitedBy;
+      list = list.filter(c => (Number(c.citedByCount) || 0) >= min);
+    }
+
+    // Year-range brush from the histogram. null means "no constraint";
+    // candidates without a year survive only when both bounds are null.
+    if (this.state.yearMin != null || this.state.yearMax != null) {
+      const lo = Number.isFinite(this.state.yearMin) ? this.state.yearMin : -Infinity;
+      const hi = Number.isFinite(this.state.yearMax) ? this.state.yearMax :  Infinity;
+      list = list.filter(c => {
+        const y = Number(c.year);
+        if (!Number.isFinite(y) || y === 0) return false;
+        return y >= lo && y <= hi;
+      });
     }
 
     const { key, dir } = this.state.sort;
@@ -666,6 +906,7 @@ var SnowballDialog = {
     this.updateSortIndicators();
     this.updateSelectAllState(visible);
     this.updateCounts(visible);
+    this.renderYearHistogram();
   },
 
   renderTable(visible) {
@@ -699,7 +940,7 @@ var SnowballDialog = {
     });
 
     this.appendCheckboxCell(tr, candidate);
-    this.appendScoreCell(tr, candidate.relevanceScore);
+    this.appendScoreCell(tr, candidate.relevanceScore, candidate);
     this.appendDirectionCell(tr, candidate.direction);
     this.appendStatusCell(tr, candidate.alreadyInLibrary);
     this.appendTextCell(tr, candidate.year || "", "col-year");
@@ -787,7 +1028,7 @@ var SnowballDialog = {
     return cell;
   },
 
-  appendScoreCell(tr, score) {
+  appendScoreCell(tr, score, candidate) {
     const cell = this.createHTMLElement("td");
     cell.className = "col-score";
     const value = Math.round((Number(score) || 0) * 100);
@@ -797,9 +1038,38 @@ var SnowballDialog = {
     if (value >= 50)      pill.classList.add("snowball-score-high");
     else if (value >= 25) pill.classList.add("snowball-score-mid");
     else                  pill.classList.add("snowball-score-low");
+    // Hover tooltip: show every signal's contribution. Native `title`
+    // attribute (no extra DOM, accessible, keyboard reachable).
+    const breakdown = candidate?._scoreBreakdown;
+    if (breakdown) pill.title = this._formatBreakdownTooltip(breakdown);
     cell.appendChild(pill);
     tr.appendChild(cell);
     return cell;
+  },
+
+  /**
+   * Format the per-signal breakdown stored on each candidate into a
+   * compact multi-line tooltip. Numbers are clamped to two decimals and
+   * the lines are right-aligned-ish with padding so they read as a small
+   * table even though native title rendering uses a fixed font.
+   */
+  _formatBreakdownTooltip(b) {
+    const lines = [];
+    const row = (label, value, suffix = "") =>
+      lines.push(`${label.padEnd(22)} ${Number(value || 0).toFixed(2)}${suffix}`);
+    row("Text similarity",      b.text);
+    if (b.bibCouplingRaw)   row("Bibliographic coupling", b.bibCoupling, ` (raw ${b.bibCouplingRaw})`);
+    else                    row("Bibliographic coupling", b.bibCoupling);
+    if (b.coCitationRaw)    row("Co-citation",            b.coCitation, ` (${b.coCitationRaw} seed${b.coCitationRaw === 1 ? "" : "s"})`);
+    else                    row("Co-citation",            b.coCitation);
+    row("Author overlap",       b.authorOverlap);
+    row("Title fuzzy match",    b.titleTrigram);
+    row("Citation count",       b.citation);
+    if (b.embedding > 0)    row("S2 embedding",           b.embedding);
+    if (b.abstractPenalty)  row("Abstract penalty",       b.abstractPenalty);
+    if (b.duplicatePenalty) row("Already in library",     b.duplicatePenalty);
+    if (b.directionBoost)   row("Both directions bonus",  b.directionBoost);
+    return lines.join("\n");
   },
 
   appendDirectionCell(tr, direction) {
@@ -859,17 +1129,82 @@ var SnowballDialog = {
     document.getElementById("snowball-detail-title").textContent =
       candidate.title || "Untitled";
 
-    document.getElementById("snowball-detail-meta").textContent = [
-      candidate.year || "",
-      candidate.venue || "",
-      candidate.doi ? `DOI: ${candidate.doi}` : (candidate.openAlexID || "")
-    ].filter(Boolean).join("  ·  ");
+    // Meta line: year · venue · clickable DOI / landing-page link.
+    const meta = document.getElementById("snowball-detail-meta");
+    if (meta) {
+      meta.replaceChildren();
+      const sep = () => {
+        const s = this.createHTMLElement("span");
+        s.className = "snowball-meta-sep";
+        s.textContent = "  ·  ";
+        return s;
+      };
+      const text = (value) => {
+        const span = this.createHTMLElement("span");
+        span.textContent = String(value);
+        return span;
+      };
+      let first = true;
+      const push = (node) => {
+        if (!first) meta.appendChild(sep());
+        meta.appendChild(node);
+        first = false;
+      };
+      if (candidate.year)  push(text(candidate.year));
+      if (candidate.venue) push(text(candidate.venue));
+      // Prefer DOI link, fall back to candidate.url, fall back to OpenAlex page.
+      const linkSpec = this._resolveDetailLink(candidate);
+      if (linkSpec) push(this._createDetailLink(linkSpec.label, linkSpec.url));
+    }
 
     document.getElementById("snowball-detail-authors").textContent =
       this.formatAuthors(candidate, 12) || "No authors listed.";
 
     document.getElementById("snowball-detail-abstract").textContent =
       candidate.abstract || "No abstract available.";
+  },
+
+  _resolveDetailLink(candidate) {
+    const doi = String(candidate.doi || "").trim();
+    if (doi) {
+      const safe = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
+                       .replace(/^doi:/i, "");
+      return { label: `DOI: ${safe}`, url: `https://doi.org/${encodeURI(safe)}` };
+    }
+    if (typeof candidate.url === "string" && /^https?:\/\//i.test(candidate.url)) {
+      return { label: "Open in browser", url: candidate.url };
+    }
+    if (candidate.openAlexID) {
+      return {
+        label: candidate.openAlexID,
+        url: `https://openalex.org/${encodeURIComponent(candidate.openAlexID)}`
+      };
+    }
+    return null;
+  },
+
+  /**
+   * Build a clickable detail link. Prefers Zotero.launchURL (which opens
+   * in the user's default external browser per Zotero's rules); falls
+   * back to window.open when launchURL isn't available.
+   */
+  _createDetailLink(label, url) {
+    const a = this.createHTMLElement("a");
+    a.className = "snowball-detail-link";
+    a.href = url;
+    a.textContent = label;
+    a.title = url;
+    a.addEventListener("click", event => {
+      event.preventDefault();
+      try {
+        if (typeof Zotero !== "undefined" && typeof Zotero.launchURL === "function") {
+          Zotero.launchURL(url);
+        } else {
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
+      } catch (_) { /* ignore */ }
+    });
+    return a;
   },
 
   // ---------- Toast + details overlay -------------------------------------

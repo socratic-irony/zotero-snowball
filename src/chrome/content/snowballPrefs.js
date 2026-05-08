@@ -14,7 +14,32 @@ var SnowballPrefs = {
     maxForwardPerSeed:     { type: "number",  default: 100,   min: 0,    max: 1000 },
     maxBackwardPerSeed:    { type: "number",  default: 100,   min: 0,    max: 1000 },
     maxCandidatesTotal:    { type: "number",  default: 500,   min: 1,    max: 10000 },
-    requestTimeoutMs:      { type: "number",  default: 30000, min: 1000, max: 120000 }
+    requestTimeoutMs:      { type: "number",  default: 30000, min: 1000, max: 120000 },
+    minCitedBy:            { type: "number",  default: 0,     min: 0,    max: 100000 }
+  },
+
+  // The 7 ranking weights live in their own pref namespace so a
+  // `Reset to defaults` button can wipe them in one operation.
+  // Default values mirror SnowballRanking.WEIGHTS.
+  WEIGHT_DEFAULTS: {
+    text:          1.00,
+    bibCoupling:   0.20,
+    coCitation:    0.15,
+    authorOverlap: 0.10,
+    titleTrigram:  0.08,
+    citation:      0.10,
+    embedding:     0.40
+  },
+
+  // Display labels for each weight in the prefs UI.
+  WEIGHT_LABELS: {
+    text:          "Text similarity (title + abstract)",
+    bibCoupling:   "Bibliographic coupling",
+    coCitation:    "Co-citation across seeds",
+    authorOverlap: "Author overlap with seeds",
+    titleTrigram:  "Title fuzzy similarity",
+    citation:      "Citation count",
+    embedding:     "Semantic Scholar embedding"
   },
 
   _pendingValues: null,
@@ -51,6 +76,9 @@ var SnowballPrefs = {
           }
         });
       }
+
+      // Build the weight-slider rows.
+      this._renderWeightControls();
     } catch (error) {
       try {
         if (typeof SnowballLog !== "undefined") {
@@ -152,6 +180,10 @@ var SnowballPrefs = {
     for (const [name, value] of Object.entries(values)) {
       this.args.plugin.setPref(name, value);
     }
+    // Persist weight sliders alongside the rest of the prefs.
+    for (const [name, value] of Object.entries(this._readWeightValues())) {
+      this.args.plugin.setPref(name, value);
+    }
     window.close();
   },
 
@@ -176,6 +208,71 @@ var SnowballPrefs = {
     document.getElementById("snowball-prefs-confirm")?.setAttribute("hidden", "hidden");
     document.getElementById("snowball-prefs-save")?.removeAttribute("hidden");
     document.getElementById("snowball-prefs-save-anyway")?.setAttribute("hidden", "hidden");
+  },
+
+  // ---------- Weight sliders ---------------------------------------------
+
+  _renderWeightControls() {
+    const container = document.getElementById("snowball-weight-controls");
+    if (!container) return;
+    container.replaceChildren();
+
+    for (const [name, defaultValue] of Object.entries(this.WEIGHT_DEFAULTS)) {
+      const row = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+      row.className = "snowball-weight-row";
+
+      const label = document.createElementNS("http://www.w3.org/1999/xhtml", "label");
+      label.className = "snowball-weight-label";
+      label.textContent = `${this.WEIGHT_LABELS[name] || name} (default ${defaultValue.toFixed(2)})`;
+
+      const slider = document.createElementNS("http://www.w3.org/1999/xhtml", "input");
+      slider.type = "range";
+      slider.id = `pref-weight-${name}`;
+      slider.min = "0";
+      slider.max = "2";
+      slider.step = "0.05";
+
+      const value = this.args.plugin
+        ? Number(this.args.plugin.pref(`weights.${name}`, defaultValue))
+        : defaultValue;
+      slider.value = String(Number.isFinite(value) ? value : defaultValue);
+
+      const display = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      display.className = "snowball-weight-value";
+      display.textContent = Number(slider.value).toFixed(2);
+
+      slider.addEventListener("input", () => {
+        display.textContent = Number(slider.value).toFixed(2);
+      });
+
+      row.appendChild(label);
+      row.appendChild(slider);
+      row.appendChild(display);
+      container.appendChild(row);
+    }
+  },
+
+  resetWeights() {
+    for (const [name, defaultValue] of Object.entries(this.WEIGHT_DEFAULTS)) {
+      const slider = document.getElementById(`pref-weight-${name}`);
+      if (!slider) continue;
+      slider.value = String(defaultValue);
+      // Trigger the value-display update.
+      slider.dispatchEvent(new Event("input"));
+    }
+  },
+
+  _readWeightValues() {
+    const values = {};
+    for (const name of Object.keys(this.WEIGHT_DEFAULTS)) {
+      const slider = document.getElementById(`pref-weight-${name}`);
+      if (!slider) continue;
+      const n = Number(slider.value);
+      values[`weights.${name}`] = Number.isFinite(n)
+        ? Math.max(0, Math.min(2, n))
+        : this.WEIGHT_DEFAULTS[name];
+    }
+    return values;
   },
 
   _showError(error) {

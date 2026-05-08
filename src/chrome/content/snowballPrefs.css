@@ -134,3 +134,39 @@
   font-size: 11.5px;
   line-height: 1.5;
 }
+
+/* ---- Weight sliders --------------------------------------------------- */
+
+.snowball-weights {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.snowball-weight-row {
+  display: grid;
+  grid-template-columns: 1fr 200px 48px;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.snowball-weight-label {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+}
+
+.snowball-weight-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--color-accent, light-dark(#0a84ff, #58a6ff));
+}
+
+.snowball-weight-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--snowball-text-secondary, light-dark(#555, #aaa));
+  text-align: right;
+}
