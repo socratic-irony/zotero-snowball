@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] – 2026-05-08
+
+### Changed
+- Bumped CI/release GitHub Actions to current majors so the workflows stop
+  running on the deprecated Node 20 runtime:
+  `actions/checkout@v6`, `actions/setup-node@v6`, `actions/upload-artifact@v7`,
+  `softprops/action-gh-release@v3`.
+- Workflows now use Node 22 (current LTS) for tests and the build step;
+  `engines.node` raised to `>=20`.
+
+### Verified
+- End-to-end auto-update path: install 0.2.0, push v0.2.1 tag, confirm Zotero
+  picks up the upgrade through its own update mechanism (no manual XPI
+  download).
+
 ## [0.2.0] – 2026-05-07
 
 ### Added
@@ -74,7 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.1.6...v0.2.0
 [0.1.6]: https://github.com/socratic-irony/zotero-snowball/compare/v0.1.3...v0.1.6
 [0.1.3]: https://github.com/socratic-irony/zotero-snowball/compare/v0.1.0...v0.1.3
