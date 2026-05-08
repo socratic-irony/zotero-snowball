@@ -19,9 +19,6 @@ var SnowballDialog = {
     direction: "all",
     hideExisting: false,
     minCitedBy: 0,
-    // null means "no constraint" — set by the histogram brush.
-    yearMin: null,
-    yearMax: null,
     sort: { key: "relevanceScore", dir: "desc" },
     selectedIndex: -1
   },
@@ -504,8 +501,6 @@ var SnowballDialog = {
       });
     }
 
-    // Year-range histogram (interaction is owned by initYearHistogram).
-    this.initYearHistogram();
 
     document.getElementById("snowball-select-all")
       .addEventListener("change", event => {
@@ -702,137 +697,6 @@ var SnowballDialog = {
     }
   },
 
-  // ---------- Year-range histogram --------------------------------------
-  //
-  // Renders a tiny SVG bar chart of candidates-per-year and a brushable
-  // range with two draggable handles. State lives on `state.yearMin` /
-  // `state.yearMax`; getVisibleCandidates() applies the filter.
-  //
-  // The histogram remains hidden until at least one candidate has a year,
-  // and re-renders whenever refresh() does so it stays in sync with the
-  // streaming results without us needing to wire individual updates.
-
-  initYearHistogram() {
-    const svg = document.getElementById("snowball-year-svg");
-    if (!svg) return;
-
-    const handleMin = document.getElementById("snowball-year-handle-min");
-    const handleMax = document.getElementById("snowball-year-handle-max");
-    if (!handleMin || !handleMax) return;
-
-    let dragging = null;     // "min" | "max" | null
-
-    const onDown = which => event => {
-      if (event.button !== 0) return;
-      dragging = which;
-      event.preventDefault();
-      event.stopPropagation();
-    };
-
-    const onMove = event => {
-      if (!dragging) return;
-      const meta = this._yearHistogramMeta;
-      if (!meta || meta.range <= 0) return;
-      const rect = svg.getBoundingClientRect();
-      const x = Math.max(0, Math.min(meta.width, event.clientX - rect.left));
-      const year = Math.round(meta.minYear + (x / meta.width) * meta.range);
-      if (dragging === "min") {
-        this.state.yearMin = Math.min(year, this.state.yearMax ?? meta.maxYear);
-      } else {
-        this.state.yearMax = Math.max(year, this.state.yearMin ?? meta.minYear);
-      }
-      this.scheduleRefresh();
-    };
-
-    const onUp = () => { dragging = null; };
-
-    handleMin.addEventListener("mousedown", onDown("min"));
-    handleMax.addEventListener("mousedown", onDown("max"));
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-
-    document.getElementById("snowball-year-reset")
-      ?.addEventListener("click", () => {
-        this.state.yearMin = null;
-        this.state.yearMax = null;
-        this.refresh();
-      });
-  },
-
-  renderYearHistogram() {
-    const wrapper = document.getElementById("snowball-year-filter");
-    const svg = document.getElementById("snowball-year-svg");
-    const barsGroup = document.getElementById("snowball-year-bars");
-    const readout = document.getElementById("snowball-year-readout");
-    const handleMin = document.getElementById("snowball-year-handle-min");
-    const handleMax = document.getElementById("snowball-year-handle-max");
-    const band = document.getElementById("snowball-year-band");
-    if (!wrapper || !svg || !barsGroup || !readout || !handleMin || !handleMax || !band) return;
-
-    // Bin candidates by year (skip null/0).
-    const counts = new Map();
-    for (const c of this.candidates) {
-      const y = Number(c.year);
-      if (!Number.isFinite(y) || y === 0) continue;
-      counts.set(y, (counts.get(y) || 0) + 1);
-    }
-
-    if (counts.size < 2) {
-      // Hide the filter until there's enough data to brush over.
-      wrapper.setAttribute("hidden", "hidden");
-      this._yearHistogramMeta = null;
-      return;
-    }
-    wrapper.removeAttribute("hidden");
-
-    const years = Array.from(counts.keys()).sort((a, b) => a - b);
-    const minYear = years[0];
-    const maxYear = years[years.length - 1];
-    const range = Math.max(1, maxYear - minYear);
-    let maxCount = 0;
-    for (const v of counts.values()) if (v > maxCount) maxCount = v;
-
-    const width = Number(svg.getAttribute("width")) || 320;
-    const innerHeight = 32;
-
-    // Wipe the existing bars; render one per year present.
-    barsGroup.replaceChildren();
-    const NS = "http://www.w3.org/2000/svg";
-    const barWidth = Math.max(1, Math.floor(width / (range + 1)) - 1);
-    for (const [year, count] of counts) {
-      const xRatio = (year - minYear) / range;
-      const x = Math.round(xRatio * (width - barWidth));
-      const h = Math.max(1, Math.round((count / maxCount) * innerHeight));
-      const rect = document.createElementNS(NS, "rect");
-      rect.setAttribute("x", String(x));
-      rect.setAttribute("y", String(innerHeight - h));
-      rect.setAttribute("width", String(barWidth));
-      rect.setAttribute("height", String(h));
-      rect.setAttribute("class", "snowball-year-bar");
-      rect.setAttribute("data-year", String(year));
-      barsGroup.appendChild(rect);
-    }
-
-    // Handle positions — clamp to current data, NULL means "at the edge".
-    const lo = Number.isFinite(this.state.yearMin) ? this.state.yearMin : minYear;
-    const hi = Number.isFinite(this.state.yearMax) ? this.state.yearMax : maxYear;
-    const xMin = Math.round(((lo - minYear) / range) * width);
-    const xMax = Math.round(((hi - minYear) / range) * width);
-
-    handleMin.setAttribute("x1", String(xMin)); handleMin.setAttribute("x2", String(xMin));
-    handleMax.setAttribute("x1", String(xMax)); handleMax.setAttribute("x2", String(xMax));
-    band.setAttribute("x", String(Math.min(xMin, xMax)));
-    band.setAttribute("width", String(Math.abs(xMax - xMin)));
-
-    // Readout reflects active brush vs. full range.
-    const usingFull = !Number.isFinite(this.state.yearMin) && !Number.isFinite(this.state.yearMax);
-    readout.textContent = usingFull
-      ? `${minYear}–${maxYear}`
-      : `${lo}–${hi} (of ${minYear}–${maxYear})`;
-
-    this._yearHistogramMeta = { width, minYear, maxYear, range };
-  },
-
   getVisibleCandidates() {
     let list = this.candidates;
 
@@ -860,18 +724,6 @@ var SnowballDialog = {
     if (this.state.minCitedBy > 0) {
       const min = this.state.minCitedBy;
       list = list.filter(c => (Number(c.citedByCount) || 0) >= min);
-    }
-
-    // Year-range brush from the histogram. null means "no constraint";
-    // candidates without a year survive only when both bounds are null.
-    if (this.state.yearMin != null || this.state.yearMax != null) {
-      const lo = Number.isFinite(this.state.yearMin) ? this.state.yearMin : -Infinity;
-      const hi = Number.isFinite(this.state.yearMax) ? this.state.yearMax :  Infinity;
-      list = list.filter(c => {
-        const y = Number(c.year);
-        if (!Number.isFinite(y) || y === 0) return false;
-        return y >= lo && y <= hi;
-      });
     }
 
     const { key, dir } = this.state.sort;
@@ -906,7 +758,6 @@ var SnowballDialog = {
     this.updateSortIndicators();
     this.updateSelectAllState(visible);
     this.updateCounts(visible);
-    this.renderYearHistogram();
   },
 
   renderTable(visible) {
@@ -1038,38 +889,92 @@ var SnowballDialog = {
     if (value >= 50)      pill.classList.add("snowball-score-high");
     else if (value >= 25) pill.classList.add("snowball-score-mid");
     else                  pill.classList.add("snowball-score-low");
-    // Hover tooltip: show every signal's contribution. Native `title`
-    // attribute (no extra DOM, accessible, keyboard reachable).
+    // Hover tooltip — custom positioned panel rather than the native
+    // `title` attribute, which Zotero's chrome environment renders
+    // unreliably (sometimes not at all) and limits to plain monospace.
     const breakdown = candidate?._scoreBreakdown;
-    if (breakdown) pill.title = this._formatBreakdownTooltip(breakdown);
+    if (breakdown) {
+      pill.dataset.hasBreakdown = "1";
+      pill.addEventListener("mouseenter", e => this._showScoreTooltip(e, breakdown));
+      pill.addEventListener("mousemove",  e => this._positionScoreTooltip(e));
+      pill.addEventListener("mouseleave", () => this._hideScoreTooltip());
+      pill.addEventListener("focus",      e => this._showScoreTooltip(e, breakdown));
+      pill.addEventListener("blur",       () => this._hideScoreTooltip());
+      pill.tabIndex = 0;
+    }
     cell.appendChild(pill);
     tr.appendChild(cell);
     return cell;
   },
 
-  /**
-   * Format the per-signal breakdown stored on each candidate into a
-   * compact multi-line tooltip. Numbers are clamped to two decimals and
-   * the lines are right-aligned-ish with padding so they read as a small
-   * table even though native title rendering uses a fixed font.
-   */
-  _formatBreakdownTooltip(b) {
-    const lines = [];
-    const row = (label, value, suffix = "") =>
-      lines.push(`${label.padEnd(22)} ${Number(value || 0).toFixed(2)}${suffix}`);
-    row("Text similarity",      b.text);
-    if (b.bibCouplingRaw)   row("Bibliographic coupling", b.bibCoupling, ` (raw ${b.bibCouplingRaw})`);
-    else                    row("Bibliographic coupling", b.bibCoupling);
-    if (b.coCitationRaw)    row("Co-citation",            b.coCitation, ` (${b.coCitationRaw} seed${b.coCitationRaw === 1 ? "" : "s"})`);
-    else                    row("Co-citation",            b.coCitation);
-    row("Author overlap",       b.authorOverlap);
-    row("Title fuzzy match",    b.titleTrigram);
-    row("Citation count",       b.citation);
-    if (b.embedding > 0)    row("S2 embedding",           b.embedding);
-    if (b.abstractPenalty)  row("Abstract penalty",       b.abstractPenalty);
-    if (b.duplicatePenalty) row("Already in library",     b.duplicatePenalty);
-    if (b.directionBoost)   row("Both directions bonus",  b.directionBoost);
-    return lines.join("\n");
+  // ---- Custom score tooltip ----------------------------------------------
+
+  _showScoreTooltip(event, b) {
+    const tip = document.getElementById("snowball-score-tooltip");
+    if (!tip || !b) return;
+
+    tip.replaceChildren();
+    const dl = this.createHTMLElement("dl");
+    dl.className = "snowball-score-tooltip-list";
+
+    const addRow = (label, value, hint) => {
+      const dt = this.createHTMLElement("dt");
+      dt.textContent = label;
+      const dd = this.createHTMLElement("dd");
+      const num = this.createHTMLElement("span");
+      num.className = "snowball-score-tooltip-num";
+      const v = Number(value) || 0;
+      num.textContent = (v >= 0 ? "+" : "") + v.toFixed(2);
+      dd.appendChild(num);
+      if (hint) {
+        const h = this.createHTMLElement("span");
+        h.className = "snowball-score-tooltip-hint";
+        h.textContent = hint;
+        dd.appendChild(h);
+      }
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    };
+
+    addRow("Text similarity",      b.text);
+    addRow("Bibliographic coupling", b.bibCoupling, b.bibCouplingRaw ? `${b.bibCouplingRaw} shared` : null);
+    addRow("Co-citation",          b.coCitation, b.coCitationRaw ? `${b.coCitationRaw} seed${b.coCitationRaw === 1 ? "" : "s"}` : null);
+    addRow("Author overlap",       b.authorOverlap);
+    addRow("Title fuzzy match",    b.titleTrigram);
+    addRow("Citation count",       b.citation);
+    if (b.embedding > 0)    addRow("S2 embedding",       b.embedding);
+    if (b.abstractPenalty)  addRow("Abstract penalty",   b.abstractPenalty);
+    if (b.duplicatePenalty) addRow("Already in library", b.duplicatePenalty);
+    if (b.directionBoost)   addRow("Both-directions",    b.directionBoost);
+
+    tip.appendChild(dl);
+    tip.removeAttribute("hidden");
+    this._positionScoreTooltip(event);
+  },
+
+  _positionScoreTooltip(event) {
+    const tip = document.getElementById("snowball-score-tooltip");
+    const dialog = document.querySelector(".snowball-dialog");
+    if (!tip || !dialog || tip.hasAttribute("hidden")) return;
+    const dr = dialog.getBoundingClientRect();
+    const tr = tip.getBoundingClientRect();
+    // Anchor near the cursor with a small offset; clamp inside the dialog.
+    const margin = 8;
+    let x = event.clientX - dr.left + 14;
+    let y = event.clientY - dr.top + 14;
+    if (x + tr.width + margin > dr.width) {
+      // Flip to the left of the cursor when there's no room on the right.
+      x = Math.max(margin, event.clientX - dr.left - tr.width - 14);
+    }
+    if (y + tr.height + margin > dr.height) {
+      y = Math.max(margin, event.clientY - dr.top - tr.height - 14);
+    }
+    tip.style.left = `${Math.round(x)}px`;
+    tip.style.top  = `${Math.round(y)}px`;
+  },
+
+  _hideScoreTooltip() {
+    document.getElementById("snowball-score-tooltip")?.setAttribute("hidden", "hidden");
   },
 
   appendDirectionCell(tr, direction) {

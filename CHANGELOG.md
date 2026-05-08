@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] – 2026-05-08
+
+### Removed
+- Year-range histogram. The brushable mini-chart felt visually noisy and
+  wasn't pulling its weight in the toolbar; the year filter sub-toolbar
+  is gone with it. Sort-by-year and the existing text filter cover the
+  same intent without the extra UI surface.
+
+### Changed
+- **Min cited-by** input moved up into the main toolbar row alongside
+  the other filters and made narrower (56 px). Same behavior as before.
+- **Score breakdown tooltip** now renders as a styled definition list
+  instead of relying on the native `title` attribute (which wasn't
+  showing reliably in Zotero 9's chrome window). Keyboard-reachable —
+  focus a score badge and the tooltip appears, blur dismisses.
+  Positioned relative to the dialog body and clamped inside it so it
+  never overflows the window.
+
 ## [0.4.0] – 2026-05-08
 
 ### Added — review dialog
@@ -218,7 +236,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.1...v0.3.0
