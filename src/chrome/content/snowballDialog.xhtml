@@ -53,6 +53,28 @@
       </html:label>
     </hbox>
 
+    <html:div id="snowball-toast" class="snowball-toast" hidden="hidden" role="status" aria-live="polite">
+      <html:span id="snowball-toast-icon" class="snowball-toast-icon" aria-hidden="true"/>
+      <html:span id="snowball-toast-message" class="snowball-toast-message"/>
+      <html:button id="snowball-toast-action" class="snowball-toast-action" hidden="hidden"/>
+      <html:button id="snowball-toast-dismiss" class="snowball-toast-dismiss"
+                   type="button" aria-label="Dismiss">×</html:button>
+    </html:div>
+
+    <html:div id="snowball-details-overlay" class="snowball-overlay" hidden="hidden" role="dialog">
+      <html:div class="snowball-overlay-card">
+        <html:div class="snowball-overlay-header">
+          <html:h2 id="snowball-overlay-title">Some items could not be added</html:h2>
+          <html:button id="snowball-overlay-close" class="snowball-overlay-close"
+                       type="button" aria-label="Close">×</html:button>
+        </html:div>
+        <html:div id="snowball-overlay-body" class="snowball-overlay-body"/>
+        <html:div class="snowball-overlay-footer">
+          <html:button id="snowball-overlay-ok" type="button">OK</html:button>
+        </html:div>
+      </html:div>
+    </html:div>
+
     <hbox flex="1" class="snowball-body">
       <html:div id="snowball-table-container">
         <html:table id="snowball-table">

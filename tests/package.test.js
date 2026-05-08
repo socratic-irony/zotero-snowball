@@ -108,3 +108,23 @@ test("review dialog script avoids HTML string injection in the XML chrome docume
 
   assert.doesNotMatch(source, /\.innerHTML\s*=/);
 });
+
+test("dialog and prefs scripts do not use window.alert / confirm / prompt", () => {
+  // These render with the ugly "[JavaScript Application]" window header.
+  // The dialog and prefs use the in-dialog toast and inline confirm panel
+  // instead. Keep this guard so we don't regress.
+  const targets = [
+    "src/chrome/content/snowballDialog.js",
+    "src/chrome/content/snowballPrefs.js"
+  ];
+  for (const rel of targets) {
+    const text = fs.readFileSync(path.join(ROOT, rel), "utf8");
+    for (const fn of ["window.alert", "window.confirm", "window.prompt"]) {
+      assert.doesNotMatch(
+        text,
+        new RegExp(fn.replace(".", "\\.") + "\\s*\\("),
+        `${rel} must not call ${fn}() — use the in-dialog toast instead`
+      );
+    }
+  }
+});

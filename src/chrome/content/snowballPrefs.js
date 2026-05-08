@@ -17,6 +17,8 @@ var SnowballPrefs = {
     requestTimeoutMs:      { type: "number",  default: 30000, min: 1000, max: 120000 }
   },
 
+  _pendingValues: null,
+
   onLoad(args) {
     try {
       this.args = args || {};
@@ -40,6 +42,14 @@ var SnowballPrefs = {
         if (spec.type === "string" && Number.isFinite(spec.maxLength)) {
           input.maxLength = spec.maxLength;
         }
+        // Editing any field after the inline confirm panel has appeared
+        // resets the flow so the user can click plain "Save" again.
+        input.addEventListener("input", () => {
+          if (this._pendingValues) {
+            this._pendingValues = null;
+            this._hideAdjustments();
+          }
+        });
       }
     } catch (error) {
       try {
@@ -105,31 +115,86 @@ var SnowballPrefs = {
     return result;
   },
 
+  /**
+   * First Save click. If the user's input was clean, persist and close.
+   * If anything was adjusted, surface the diff inline and switch the
+   * footer to "Save anyway" instead of popping a [JavaScript Application]
+   * confirm dialog.
+   */
   save() {
     try {
       const { values, errors } = this.validate();
       if (errors.length) {
-        const proceed = window.confirm(
-          "Some values were adjusted before saving:\n\n" +
-          errors.join("\n") +
-          "\n\nSave with the adjusted values?"
-        );
-        if (!proceed) return;
+        this._pendingValues = values;
+        this._showAdjustments(errors);
+        return;
       }
-      for (const [name, value] of Object.entries(values)) {
-        this.args.plugin.setPref(name, value);
-      }
-      window.close();
+      this._commit(values);
     } catch (error) {
-      try {
-        if (typeof SnowballLog !== "undefined") {
-          SnowballLog.error("Prefs save failed", { error: SnowballLog.formatError(error) });
-        }
-      } catch (_) { /* ignore */ }
-      const friendly = (typeof formatUserError === "function")
-        ? formatUserError(error)
-        : (error?.message || String(error));
-      window.alert(`Failed to save preferences: ${friendly}`);
+      this._showError(error);
+    }
+  },
+
+  /** Second click — user said "Save anyway" after seeing the inline diff. */
+  saveConfirmed() {
+    try {
+      const values = this._pendingValues;
+      this._pendingValues = null;
+      this._hideAdjustments();
+      if (!values) return;
+      this._commit(values);
+    } catch (error) {
+      this._showError(error);
+    }
+  },
+
+  _commit(values) {
+    for (const [name, value] of Object.entries(values)) {
+      this.args.plugin.setPref(name, value);
+    }
+    window.close();
+  },
+
+  _showAdjustments(errors) {
+    const panel = document.getElementById("snowball-prefs-confirm");
+    const list  = document.getElementById("snowball-prefs-confirm-details");
+    if (panel && list) {
+      list.replaceChildren();
+      for (const e of errors) {
+        const li = document.createElementNS("http://www.w3.org/1999/xhtml", "li");
+        li.textContent = String(e);
+        list.appendChild(li);
+      }
+      panel.removeAttribute("hidden");
+    }
+    // Swap the primary button: "Save" → "Save anyway".
+    document.getElementById("snowball-prefs-save")?.setAttribute("hidden", "hidden");
+    document.getElementById("snowball-prefs-save-anyway")?.removeAttribute("hidden");
+  },
+
+  _hideAdjustments() {
+    document.getElementById("snowball-prefs-confirm")?.setAttribute("hidden", "hidden");
+    document.getElementById("snowball-prefs-save")?.removeAttribute("hidden");
+    document.getElementById("snowball-prefs-save-anyway")?.setAttribute("hidden", "hidden");
+  },
+
+  _showError(error) {
+    try {
+      if (typeof SnowballLog !== "undefined") {
+        SnowballLog.error("Prefs save failed", { error: SnowballLog.formatError(error) });
+      }
+    } catch (_) { /* ignore */ }
+    const panel = document.getElementById("snowball-prefs-confirm");
+    const list  = document.getElementById("snowball-prefs-confirm-details");
+    const friendly = (typeof formatUserError === "function")
+      ? formatUserError(error)
+      : (error?.message || String(error));
+    if (panel && list) {
+      list.replaceChildren();
+      const li = document.createElementNS("http://www.w3.org/1999/xhtml", "li");
+      li.textContent = `Couldn't save: ${friendly}`;
+      list.appendChild(li);
+      panel.removeAttribute("hidden");
     }
   }
 };

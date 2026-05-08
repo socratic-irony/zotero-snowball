@@ -504,6 +504,29 @@ var SnowballDialog = {
       });
     }
 
+    // Toast / details-overlay wiring (in-dialog replacements for the
+    // ugly default `[JavaScript Application]` alert popup).
+    document.getElementById("snowball-toast-dismiss")
+      ?.addEventListener("click", () => this.hideToast());
+    document.getElementById("snowball-overlay-close")
+      ?.addEventListener("click", () => this.hideOverlay());
+    document.getElementById("snowball-overlay-ok")
+      ?.addEventListener("click", () => this.hideOverlay());
+    // Click outside the overlay card to dismiss.
+    document.getElementById("snowball-details-overlay")
+      ?.addEventListener("click", event => {
+        if (event.target.id === "snowball-details-overlay") this.hideOverlay();
+      });
+    // Esc dismisses overlay/toast.
+    window.addEventListener("keydown", event => {
+      if (event.key !== "Escape") return;
+      const overlay = document.getElementById("snowball-details-overlay");
+      if (overlay && !overlay.hasAttribute("hidden")) {
+        event.preventDefault();
+        this.hideOverlay();
+      }
+    });
+
     // Allow ⌘F / Ctrl+F to focus the filter box.
     window.addEventListener("keydown", event => {
       if ((event.metaKey || event.ctrlKey) && event.key === "f") {
@@ -849,6 +872,109 @@ var SnowballDialog = {
       candidate.abstract || "No abstract available.";
   },
 
+  // ---------- Toast + details overlay -------------------------------------
+  //
+  // These replace the default browser alert popup (which renders with an
+  // ugly "[JavaScript Application]" window header) with an in-dialog
+  // notification region styled to match the rest of the UI.
+
+  /**
+   * Show an in-dialog toast.
+   * @param {object} opts
+   * @param {string} opts.message
+   * @param {"success"|"warning"|"error"} [opts.kind="success"]
+   * @param {{label:string,onClick:()=>void}} [opts.action]
+   *        Optional inline action button (e.g. "View details").
+   * @param {number} [opts.autoCloseMs=0]
+   *        Hide the toast after this many ms. 0 = persistent.
+   */
+  showToast({ message, kind = "success", action = null, autoCloseMs = 0 } = {}) {
+    const toast    = document.getElementById("snowball-toast");
+    const messageEl = document.getElementById("snowball-toast-message");
+    const actionEl  = document.getElementById("snowball-toast-action");
+    const iconEl    = document.getElementById("snowball-toast-icon");
+    if (!toast || !messageEl || !actionEl || !iconEl) return;
+
+    toast.classList.remove("toast-success", "toast-warning", "toast-error");
+    toast.classList.add(`toast-${kind}`);
+    messageEl.textContent = String(message || "");
+    iconEl.textContent =
+      kind === "success" ? "✓" :
+      kind === "warning" ? "!" :
+      kind === "error"   ? "✕" : "•";
+
+    // Reset action button between calls.
+    actionEl.onclick = null;
+    if (action && action.label && typeof action.onClick === "function") {
+      actionEl.removeAttribute("hidden");
+      actionEl.textContent = action.label;
+      actionEl.onclick = () => {
+        try { action.onClick(); } catch (e) {
+          try {
+            if (typeof SnowballLog !== "undefined") {
+              SnowballLog.warn("toast action failed", { error: SnowballLog.formatError(e) });
+            }
+          } catch (_) { /* ignore */ }
+        }
+      };
+    } else {
+      actionEl.setAttribute("hidden", "hidden");
+    }
+
+    toast.removeAttribute("hidden");
+
+    if (this._toastTimer) {
+      clearTimeout(this._toastTimer);
+      this._toastTimer = null;
+    }
+    if (autoCloseMs > 0) {
+      this._toastTimer = setTimeout(() => this.hideToast(), autoCloseMs);
+    }
+  },
+
+  hideToast() {
+    if (this._toastTimer) {
+      clearTimeout(this._toastTimer);
+      this._toastTimer = null;
+    }
+    const toast = document.getElementById("snowball-toast");
+    toast?.setAttribute("hidden", "hidden");
+  },
+
+  /**
+   * Show the failed-items details overlay. Builds a list of {title, reason}
+   * rows so the user can see exactly what didn't make it into Zotero.
+   */
+  showFailedDetails(failed) {
+    const overlay = document.getElementById("snowball-details-overlay");
+    const body    = document.getElementById("snowball-overlay-body");
+    if (!overlay || !body) return;
+
+    body.replaceChildren();
+    const ul = this.createHTMLElement("ul");
+    ul.className = "snowball-failed-list";
+    for (const f of (Array.isArray(failed) ? failed : [])) {
+      const li = this.createHTMLElement("li");
+      const title = this.createHTMLElement("div");
+      title.className = "snowball-failed-title";
+      title.textContent = String(f?.candidate?.title || "(untitled)");
+      const reason = this.createHTMLElement("div");
+      reason.className = "snowball-failed-reason";
+      reason.textContent = String(f?.reason || "unknown error");
+      li.appendChild(title);
+      li.appendChild(reason);
+      ul.appendChild(li);
+    }
+    body.appendChild(ul);
+
+    overlay.removeAttribute("hidden");
+  },
+
+  hideOverlay() {
+    document.getElementById("snowball-details-overlay")
+      ?.setAttribute("hidden", "hidden");
+  },
+
   // ---------- Add to Zotero ------------------------------------------------
 
   async addSelected() {
@@ -858,30 +984,40 @@ var SnowballDialog = {
     try {
       const selected = this.candidates.filter(c => c._selected);
       if (!selected.length) {
-        window.alert("Select at least one candidate to add.");
+        this.showToast({
+          message: "Select at least one candidate to add.",
+          kind: "warning",
+          autoCloseMs: 3000
+        });
+        button.disabled = false;
         return;
       }
-      const result = await this.args.plugin.addCandidatesToZotero(selected, this.args.target);
-      const failed = Array.isArray(result?.failed) ? result.failed : [];
-      const addedN = result?.added?.length || 0;
-      const skippedN = result?.skipped?.length || 0;
-      const failedN = failed.length;
 
-      let message = `Added ${addedN}; updated/skipped ${skippedN}.`;
-      if (failedN) {
-        message += `\n\n${failedN} item${failedN === 1 ? "" : "s"} could not be added.`;
-        // Show up to 3 reasons so the user gets an actionable hint without
-        // a wall of text. Full details are in the Zotero debug log.
-        const sample = failed.slice(0, 3).map(f =>
-          `• ${(f.candidate?.title || "(untitled)").slice(0, 80)} — ${f.reason || "unknown"}`
-        );
-        message += "\n\n" + sample.join("\n");
-        if (failedN > sample.length) {
-          message += `\n…and ${failedN - sample.length} more (see Zotero debug log).`;
-        }
+      const result = await this.args.plugin.addCandidatesToZotero(selected, this.args.target);
+      const failed   = Array.isArray(result?.failed) ? result.failed : [];
+      const addedN   = result?.added?.length   || 0;
+      const skippedN = result?.skipped?.length || 0;
+      const failedN  = failed.length;
+
+      const summary = this._formatAddSummary(addedN, skippedN, failedN);
+
+      if (failedN === 0) {
+        // Happy path: brief confirmation, then close the dialog.
+        this.showToast({ message: summary, kind: "success", autoCloseMs: 2200 });
+        setTimeout(() => { try { window.close(); } catch (_) { /* ignore */ } }, 2200);
+      } else {
+        // Partial failure: keep the dialog open so the user can investigate.
+        this.showToast({
+          message: summary,
+          kind: "warning",
+          action: {
+            label: "View details",
+            onClick: () => this.showFailedDetails(failed)
+          },
+          autoCloseMs: 0
+        });
+        button.disabled = false;
       }
-      window.alert(message);
-      window.close();
     } catch (error) {
       const friendly = (typeof formatUserError === "function")
         ? formatUserError(error)
@@ -891,9 +1027,24 @@ var SnowballDialog = {
           SnowballLog.error("addSelected failed", { error: SnowballLog.formatError(error) });
         }
       } catch (_) { /* ignore */ }
-      window.alert(`Snowball Sources failed while adding items: ${friendly}`);
+      this.showToast({
+        message: `Couldn't add items: ${friendly}`,
+        kind: "error",
+        autoCloseMs: 0
+      });
       button.disabled = false;
     }
+  },
+
+  _formatAddSummary(addedN, skippedN, failedN) {
+    const parts = [];
+    if (addedN > 0)   parts.push(`Added ${addedN} ${addedN === 1 ? "item" : "items"} to Zotero`);
+    if (skippedN > 0) parts.push(`updated ${skippedN} existing`);
+    if (failedN > 0)  parts.push(`${failedN} couldn't be added`);
+    if (!parts.length) return "Nothing added.";
+    // Capitalize first; join with appropriate punctuation.
+    let joined = parts.join("; ");
+    return joined.charAt(0).toUpperCase() + joined.slice(1);
   },
 
   // ---------- Helpers -------------------------------------------------------

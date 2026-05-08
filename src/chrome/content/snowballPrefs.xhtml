@@ -77,10 +77,20 @@
       </html:label>
     </html:section>
 
+    <html:div id="snowball-prefs-confirm" class="snowball-prefs-confirm" hidden="hidden" role="alert">
+      <html:div class="snowball-prefs-confirm-message">
+        <html:strong>Some values were adjusted before saving.</html:strong>
+        <html:ul id="snowball-prefs-confirm-details" class="snowball-prefs-confirm-details"/>
+      </html:div>
+    </html:div>
+
     <hbox align="center" class="snowball-prefs-footer">
       <spacer flex="1"/>
-      <button label="Cancel" oncommand="window.close()"/>
-      <button label="Save" class="primary" oncommand="SnowballPrefs.save()"/>
+      <button id="snowball-prefs-cancel" label="Cancel" oncommand="window.close()"/>
+      <button id="snowball-prefs-save" label="Save" class="primary"
+              oncommand="SnowballPrefs.save()"/>
+      <button id="snowball-prefs-save-anyway" label="Save anyway" class="primary"
+              hidden="hidden" oncommand="SnowballPrefs.saveConfirmed()"/>
     </hbox>
   </vbox>
 </window>

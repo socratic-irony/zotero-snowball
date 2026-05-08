@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] – 2026-05-08
+
+### Changed
+- Replaced every `window.alert` / `window.confirm` call (which rendered
+  with the ugly "[JavaScript Application]" window header) with in-dialog
+  UI:
+  - Review dialog: a styled toast at the top of the body area —
+    success / warning / error variants, optional action button, auto-
+    dismiss for the happy path. The successful "Added N items" message
+    now closes the dialog cleanly after a 2.2-second confirmation
+    instead of popping a modal alert.
+  - Partial-failure flow: toast with a **View details** button that
+    opens an in-dialog overlay listing every failed item with its
+    reason. Esc or click-outside dismisses.
+  - Prefs dialog: when input is clamped on save, the diff appears as
+    an inline panel and the primary button switches to **Save anyway**
+    instead of popping a confirm dialog. Editing any input resets the
+    flow.
+- Full dark-mode audit. Every hardcoded "always light" hex color in the
+  pills, score badges, dividers, and prefs surfaces is now driven by
+  `light-dark()` pairs (with Zotero's `--material-*` / `--fill-*`
+  tokens taking precedence when they're defined). `color-scheme: light
+  dark` is declared on both dialog roots so native form controls follow
+  the active theme. Direction / status / score pills picked dark-mode
+  variants tuned for AA contrast on a dark surface.
+
+### Added
+- `tests/package.test.js` now guards against future regressions of
+  `window.alert/confirm/prompt` in the dialog or prefs scripts.
+
+### Verified
+- 46/46 tests pass (was 45).
+
 ## [0.3.0] – 2026-05-08
 
 ### Added — relevance ranking overhaul
@@ -140,7 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.1.6...v0.2.0
