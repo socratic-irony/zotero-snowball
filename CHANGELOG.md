@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] – 2026-05-10
+
+### Fixed
+- **Toolbar button now actually appears.** In 0.5.0 the button targeted
+  ids that don't exist in Zotero 9's chrome (`zotero-tb`,
+  `zotero-toolbar`, `main-toolbar`). The correct container is
+  `zotero-items-toolbar` (the hbox inside `zotero-toolbar-item-tree`
+  that holds Add Item / Lookup / Add Note). Updated the candidate list
+  to look there first.
+- **Icon now renders.** Zotero's `.zotero-tb-button` styling ignores
+  the legacy `image=` attribute and keys its icons to CSS rules
+  selected on the button's `id`. We now inject a one-rule stylesheet
+  that points the new button at
+  `chrome://snowball-sources/content/icons/toolbar-16.png`. The icon
+  was also mirrored under `chrome/content/icons/` so it's reachable
+  via the registered chrome content URL. The injected stylesheet is
+  cleaned up alongside the button on plugin shutdown.
+
 ## [0.5.0] – 2026-05-10
 
 ### Added
@@ -279,7 +297,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.0...v0.4.1

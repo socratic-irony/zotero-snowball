@@ -91,23 +91,30 @@ var SnowballSourcesPlugin = class {
   }
 
   /**
-   * Inject a toolbar button into the Zotero main toolbar so the snowball
-   * action is discoverable without diving into context menus. Falls back
-   * silently (logging) if the expected toolbar isn't present in this
-   * window — never throws into Zotero's bootstrap path.
+   * Inject a toolbar button into Zotero's items toolbar — the row that
+   * holds "New Item" and "Lookup" — so the snowball action sits next to
+   * other item-level commands. Falls back silently (logging) if the
+   * expected container isn't present.
+   *
+   * Zotero 9 styles its built-in toolbar icons via CSS keyed to the
+   * button id (the `image=` attribute is ignored on `.zotero-tb-button`
+   * elements), so we inject a one-rule stylesheet alongside the button.
+   * The icon lives under `chrome://snowball-sources/content/icons/` for
+   * predictable resolution from the chrome registration.
    */
   _installToolbarButton(window) {
     try {
       const doc = window.document;
       if (doc.getElementById("snowball-toolbar-button")) return;
 
-      // Zotero exposes its primary item toolbar as #zotero-tb. We also
-      // look at a few neighbors in case the structure differs across
-      // Zotero versions.
+      // `zotero-items-toolbar` is the hbox inside `zotero-toolbar-item-tree`
+      // that holds the per-item action buttons (Add, Lookup, Add Note…).
+      // We try a few candidates to be tolerant of Zotero version drift.
       const candidates = [
-        "zotero-tb",
-        "zotero-toolbar",
-        "main-toolbar"
+        "zotero-items-toolbar",
+        "zotero-toolbar-item-tree",
+        "zotero-collections-toolbar",
+        "zotero-tabs-toolbar"
       ];
       let toolbar = null;
       for (const id of candidates) {
@@ -121,12 +128,29 @@ var SnowballSourcesPlugin = class {
         return;
       }
 
+      // One-rule stylesheet so the button's icon shows up. We key the
+      // selector to our button id so the rule can't accidentally hit
+      // anything else.
+      if (!doc.getElementById("snowball-toolbar-style")) {
+        const style = doc.createElementNS("http://www.w3.org/1999/xhtml", "style");
+        style.id = "snowball-toolbar-style";
+        style.textContent = `
+          #snowball-toolbar-button {
+            list-style-image: url("chrome://snowball-sources/content/icons/toolbar-16.png");
+          }
+          #snowball-toolbar-button .toolbarbutton-icon {
+            width: 16px;
+            height: 16px;
+          }
+        `;
+        doc.documentElement.appendChild(style);
+      }
+
       const button = doc.createXULElement("toolbarbutton");
       button.id = "snowball-toolbar-button";
       button.className = "zotero-tb-button";
       button.setAttribute("tooltiptext", "Snowball Sources (⌘⇧S)");
       button.setAttribute("label", "Snowball Sources");
-      button.setAttribute("image", this.rootURI + "icons/toolbar-16.png");
       button.addEventListener("command", () => {
         this.runForCurrentSelection().catch(error => {
           try {
@@ -137,6 +161,10 @@ var SnowballSourcesPlugin = class {
         });
       });
       toolbar.appendChild(button);
+
+      if (typeof SnowballLog !== "undefined") {
+        SnowballLog.debug("toolbar button installed", { toolbar: toolbar.id });
+      }
     } catch (error) {
       try {
         if (typeof SnowballLog !== "undefined") {
@@ -202,6 +230,7 @@ var SnowballSourcesPlugin = class {
     // Remove the toolbar button and keyboard shortcut we injected, plus
     // the keyset we may have created if Zotero didn't have one.
     try { window.document.getElementById("snowball-toolbar-button")?.remove(); } catch (_) {}
+    try { window.document.getElementById("snowball-toolbar-style")?.remove(); } catch (_) {}
     try { window.document.getElementById("snowball-key")?.remove(); } catch (_) {}
     try { window.document.getElementById("snowball-keyset")?.remove(); } catch (_) {}
   }
