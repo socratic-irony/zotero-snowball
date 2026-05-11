@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] – 2026-05-10
+
+### Fixed
+- Toolbar button is now **icon-only**, matching Zotero's built-in
+  buttons (Add Item, Lookup, Add Note). The previous build set a
+  `label` attribute, which made XUL render visible text next to the
+  icon — the fixed toolbar height clipped both the icon and the text.
+  The text now lives only in the tooltip (`tooltiptext`) where it
+  belongs.
+
 ## [0.5.3] – 2026-05-10
 
 ### Changed
@@ -318,7 +328,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.0...v0.5.1

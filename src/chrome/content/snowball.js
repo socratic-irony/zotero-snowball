@@ -148,9 +148,13 @@ var SnowballSourcesPlugin = class {
 
       const button = doc.createXULElement("toolbarbutton");
       button.id = "snowball-toolbar-button";
+      // Match Zotero's built-in items-toolbar buttons (Add Item, Lookup,
+      // Add Note): icon-only, with the text only on hover via tooltiptext.
+      // Adding a `label` makes XUL render visible text next to the icon
+      // and the fixed toolbar height clips both.
       button.className = "zotero-tb-button";
       button.setAttribute("tooltiptext", "Snowball Sources (⌘⇧S)");
-      button.setAttribute("label", "Snowball Sources");
+      button.setAttribute("tabindex", "-1");
       button.addEventListener("command", () => {
         this.runForCurrentSelection().catch(error => {
           try {
