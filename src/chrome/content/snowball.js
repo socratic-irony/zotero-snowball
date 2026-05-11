@@ -160,10 +160,25 @@ var SnowballSourcesPlugin = class {
           } catch (_) { /* ignore */ }
         });
       });
-      toolbar.appendChild(button);
+
+      // The items toolbar has a `<spacer flex="1"/>` after the action
+      // buttons that pushes the search box to the right edge. Plain
+      // appendChild puts our button AFTER that spacer (and after the
+      // search box), where it's clipped off-screen. Insert before the
+      // first spacer so we land in the action-button group with
+      // Add Item / Lookup / Add Attachment / Add Note.
+      const spacer = toolbar.querySelector("spacer");
+      if (spacer) {
+        toolbar.insertBefore(button, spacer);
+      } else {
+        toolbar.appendChild(button);
+      }
 
       if (typeof SnowballLog !== "undefined") {
-        SnowballLog.debug("toolbar button installed", { toolbar: toolbar.id });
+        SnowballLog.debug("toolbar button installed", {
+          toolbar: toolbar.id,
+          insertedBeforeSpacer: !!spacer
+        });
       }
     } catch (error) {
       try {

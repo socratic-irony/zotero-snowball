@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] – 2026-05-10
+
+### Fixed
+- Toolbar button now lands in the **action-button group** (next to Add
+  Item / Lookup / Add Attachment / Add Note) instead of being appended
+  past the spacer-and-search-box and getting clipped at the right
+  edge. We now `insertBefore` the first `<spacer>` inside
+  `zotero-items-toolbar`; if no spacer is present we fall back to
+  appending.
+
 ## [0.5.1] – 2026-05-10
 
 ### Fixed
@@ -297,7 +307,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.1...v0.4.2
