@@ -65,8 +65,11 @@
   --snowball-bg-sidepane:   var(--material-sidepane,
                               var(--material-background-alt,
                                 light-dark(rgba(0,0,0,0.025), rgba(255,255,255,0.04))));
-  --snowball-bg-control:    var(--material-control,
-                              light-dark(#fff, rgba(255,255,255,0.05)));
+  /* Form controls — DELIBERATELY bypass --material-control. Zotero
+     defines --color-control as `#fff` in light mode and `#ccc` in dark
+     mode (both light); we want our inputs to feel like part of the
+     dialog's dark surface in dark mode, not floating light boxes. */
+  --snowball-bg-control:    light-dark(#fff, rgba(255, 255, 255, 0.06));
 
   /* Pill foreground/background — defined here so per-pill rules stay
      readable. Tuned so contrast is good in both modes. */
@@ -784,3 +787,62 @@
 .snowball-dialog.hide-col-authors    .col-authors   { display: none; }
 .snowball-dialog.hide-col-venue      .col-venue     { display: none; }
 .snowball-dialog.hide-col-citedBy    .col-cited     { display: none; }
+
+/* ============================================================
+ * XUL <button> dark-mode override
+ *
+ * Native macOS / Firefox XUL <button> elements don't follow the
+ * dialog's color-scheme: they render with a light gradient even when
+ * the rest of the dialog is dark. We override their `appearance` and
+ * apply theme-aware fills so the toolbar and footer buttons look like
+ * they belong to the same dialog as the table.
+ *
+ * Scope is restricted to .snowball-toolbar / .snowball-footer so we
+ * don't accidentally restyle Zotero's other XUL buttons elsewhere.
+ * ============================================================ */
+
+@media (prefers-color-scheme: dark) {
+  .snowball-toolbar button,
+  .snowball-footer button,
+  .snowball-toast-action {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--fill-primary, #f0f0f0);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+    padding: 3px 12px;
+    font-size: 12.5px;
+  }
+
+  .snowball-toolbar button:hover,
+  .snowball-footer button:hover,
+  .snowball-toast-action:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+
+  .snowball-toolbar button:active,
+  .snowball-footer button:active {
+    background: rgba(255, 255, 255, 0.20);
+  }
+
+  .snowball-toolbar button[disabled],
+  .snowball-footer button[disabled] {
+    opacity: 0.5;
+  }
+
+  /* Primary button (Add Selected to Zotero) — use the accent color so
+     the call-to-action still stands out in dark mode. */
+  .snowball-footer button.primary {
+    background: var(--snowball-accent, #4e9bff);
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+  }
+  .snowball-footer button.primary:hover {
+    background: color-mix(in srgb, var(--snowball-accent, #4e9bff) 86%, white);
+  }
+  .snowball-footer button.primary[disabled] {
+    background: rgba(78, 155, 255, 0.45);
+  }
+}

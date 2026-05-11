@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] – 2026-05-10
+
+### Fixed (dark mode audit, round 2)
+- **Form-control backgrounds were stuck on light** in dark mode. Our
+  CSS used `var(--material-control, light-dark(...))` — but Zotero's
+  `--color-control` is `#fff` in light mode and `#ccc` in dark mode
+  (both light), so the var resolved before our `light-dark()` fallback
+  was ever reached. The filter input, "All directions" dropdown,
+  "Min cites" number input, and prefs text/number inputs all rendered
+  as light boxes against the dark dialog. We now bypass
+  `--material-control` entirely and use `light-dark()` directly.
+- **XUL `<button>` elements (toolbar Stop, footer Cancel / Add Selected
+  to Zotero, prefs Save / Cancel / Reset) didn't follow the dialog's
+  `color-scheme`** — they kept their light macOS-native gradient on a
+  dark page. Added `@media (prefers-color-scheme: dark)` overrides
+  that set `appearance: none` and apply theme-aware fills, plus an
+  accent-tinted primary-button style for "Add Selected to Zotero" so
+  the call-to-action still stands out. Scope is restricted to
+  `.snowball-toolbar`, `.snowball-footer`, and the prefs sections so
+  we don't touch any other XUL chrome.
+
 ## [0.5.4] – 2026-05-10
 
 ### Fixed
@@ -328,7 +349,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.1...v0.5.2

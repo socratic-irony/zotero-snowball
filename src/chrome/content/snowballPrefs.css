@@ -77,8 +77,9 @@
   border: 1px solid var(--fill-quarternary,
     color-mix(in srgb, currentColor 22%, transparent));
   border-radius: 5px;
-  background: var(--material-control,
-    light-dark(#fff, rgba(255,255,255,0.05)));
+  /* Bypass --material-control on purpose; Zotero's value is light in
+     both modes. See snowballDialog.css for the rationale. */
+  background: light-dark(#fff, rgba(255, 255, 255, 0.06));
   color: inherit;
 }
 
@@ -177,4 +178,41 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px 16px;
+}
+
+/* ============================================================
+ * XUL <button> dark-mode override (footer + reset)
+ * Native XUL buttons don't follow color-scheme on macOS — they keep
+ * their light gradient on a dark page. Apply theme-aware fills.
+ * ============================================================ */
+
+@media (prefers-color-scheme: dark) {
+  .snowball-prefs-footer button,
+  .snowball-prefs button {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--fill-primary, #f0f0f0);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+    padding: 3px 12px;
+    font-size: 12.5px;
+  }
+
+  .snowball-prefs-footer button:hover,
+  .snowball-prefs button:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+
+  .snowball-prefs-footer button:active,
+  .snowball-prefs button:active {
+    background: rgba(255, 255, 255, 0.20);
+  }
+
+  .snowball-prefs-footer button.primary {
+    background: var(--color-accent, #4e9bff);
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+  }
 }
