@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] – 2026-05-10
+
+### Changed
+- `applications.zotero.update_url` now includes `?v=%ITEM_VERSION%` so
+  the URL Zotero polls is unique per installed version. This means
+  every version upgrade naturally bypasses Firefox's and
+  raw.githubusercontent.com's HTTP caches — users won't be told "no
+  new updates found" for up to 5 minutes after each release any
+  longer. (Existing 0.5.2-and-earlier installs will pick up the new
+  URL after they upgrade once.)
+
 ## [0.5.2] – 2026-05-10
 
 ### Fixed
@@ -307,7 +318,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.2...v0.5.0

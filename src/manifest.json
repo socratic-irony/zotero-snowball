@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Snowball Sources",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Find forward and backward citations for selected Zotero items and collections.",
   "author": "Ryan Jenkins",
   "homepage_url": "https://github.com/socratic-irony/zotero-snowball",
@@ -12,7 +12,7 @@
   "applications": {
     "zotero": {
       "id": "snowball-sources@socratic-irony.github.io",
-      "update_url": "https://raw.githubusercontent.com/socratic-irony/zotero-snowball/main/updates.json",
+      "update_url": "https://raw.githubusercontent.com/socratic-irony/zotero-snowball/main/updates.json?v=%ITEM_VERSION%",
       "strict_min_version": "9.0",
       "strict_max_version": "9.0.*"
     }
