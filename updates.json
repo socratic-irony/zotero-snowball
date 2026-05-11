@@ -78,6 +78,17 @@
               "strict_max_version": "9.0.*"
             }
           }
+        },
+        {
+          "version": "0.5.0",
+          "update_link": "https://github.com/socratic-irony/zotero-snowball/releases/download/v0.5.0/snowball-sources-0.5.0.xpi",
+          "update_hash": "sha256:1d986c6739ae1423f7a32ecc785fd44a7b060d4b53c9bfc34e52c731ceb0f8df",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "9.0",
+              "strict_max_version": "9.0.*"
+            }
+          }
         }
       ]
     }
