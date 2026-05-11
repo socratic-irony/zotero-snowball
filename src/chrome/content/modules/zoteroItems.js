@@ -88,16 +88,29 @@ var SnowballZoteroItems = {
   /**
    * Adds candidates to Zotero. Each candidate gets its own try/catch inside
    * the transaction so a single malformed item can't roll back the whole
-   * batch. Returns { added, skipped, failed } so the UI can report partial
-   * success accurately.
+   * batch.
+   *
+   * @param {object[]} candidates
+   * @param {object}   target  { libraryID, collectionID? }
+   * @param {object}   [opts]
+   * @param {boolean}  [opts.downloadPDFs=true]  Kick off background PDF
+   *        downloads for any candidate carrying `pdfURL`. Downloads run
+   *        AFTER the DB transaction commits so they don't deadlock the
+   *        write path or block the bulk-add.
+   *
+   * @returns {Promise<{added, skipped, failed, downloadsStarted}>}
    */
-  async addCandidates(candidates, target) {
+  async addCandidates(candidates, target, opts = {}) {
+    const downloadPDFs = opts?.downloadPDFs !== false;
+
     const added = [];
     const skipped = [];
     const failed = [];
+    // Collected during the transaction; PDF imports fire AFTER it commits.
+    const pdfTargets = [];
 
     if (!Array.isArray(candidates) || !candidates.length) {
-      return { added, skipped, failed };
+      return { added, skipped, failed, downloadsStarted: 0 };
     }
     if (!target || !Number.isFinite(target.libraryID)) {
       throw new Error("addCandidates: target.libraryID is required.");
@@ -133,6 +146,15 @@ var SnowballZoteroItems = {
           }
           await item.save();
           added.push(candidate);
+
+          // Queue a PDF download if OpenAlex gave us an OA URL. Filtered
+          // through safeURL so we never queue a javascript:/data: link.
+          if (downloadPDFs) {
+            const pdfURL = this._safePDFURL(candidate.pdfURL);
+            if (pdfURL && item.id) {
+              pdfTargets.push({ candidate, itemID: item.id, pdfURL });
+            }
+          }
         } catch (error) {
           failed.push({
             candidate,
@@ -153,7 +175,64 @@ var SnowballZoteroItems = {
       }
     });
 
-    return { added, skipped, failed };
+    // Fire PDF downloads OUTSIDE the transaction so they don't deadlock
+    // Zotero's write path. Fire-and-forget: the user sees a count in the
+    // success toast and Zotero's own notifier shows download progress.
+    if (pdfTargets.length) {
+      this._kickOffPDFDownloads(pdfTargets, target.libraryID);
+    }
+
+    return {
+      added,
+      skipped,
+      failed,
+      downloadsStarted: pdfTargets.length
+    };
+  },
+
+  _safePDFURL(value) {
+    const s = String(value || "").trim();
+    if (!s) return "";
+    return /^https?:\/\//i.test(s) ? s : "";
+  },
+
+  /**
+   * Spawn PDF-import requests in the background. We don't await — Zotero
+   * has its own internal queue and the user shouldn't wait for downloads
+   * before the dialog closes. Failures land in the Zotero debug log via
+   * SnowballLog so the user can triage later if a download silently
+   * doesn't appear.
+   */
+  _kickOffPDFDownloads(targets, libraryID) {
+    if (!targets?.length) return;
+    if (!Zotero?.Attachments?.importFromURL) {
+      try {
+        if (typeof SnowballLog !== "undefined") {
+          SnowballLog.warn("PDF downloads requested but Zotero.Attachments.importFromURL is unavailable");
+        }
+      } catch (_) { /* ignore */ }
+      return;
+    }
+    for (const t of targets) {
+      // Promise intentionally unawaited.
+      Zotero.Attachments.importFromURL({
+        libraryID,
+        parentItemID: t.itemID,
+        url: t.pdfURL,
+        title: "Full Text PDF",
+        contentType: "application/pdf"
+      }).catch(error => {
+        try {
+          if (typeof SnowballLog !== "undefined") {
+            SnowballLog.warn("PDF download failed", {
+              title: String(t.candidate?.title || "").slice(0, 120),
+              url: t.pdfURL,
+              error: SnowballLog.formatError(error)
+            });
+          }
+        } catch (_) { /* ignore */ }
+      });
+    }
   },
 
   // Where each item type stores the candidate's "venue" string. Anything not

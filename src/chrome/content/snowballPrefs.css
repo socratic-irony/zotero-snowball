@@ -170,3 +170,11 @@
   color: var(--snowball-text-secondary, light-dark(#555, #aaa));
   text-align: right;
 }
+
+/* ---- Column visibility grid ------------------------------------------- */
+
+.snowball-columns-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 16px;
+}

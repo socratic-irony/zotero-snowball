@@ -10,12 +10,21 @@ var SnowballPrefs = {
     includeForward:        { type: "boolean", default: true },
     includeBackward:       { type: "boolean", default: true },
     skipAlreadyInLibrary:  { type: "boolean", default: true },
+    downloadPDFs:          { type: "boolean", default: true },
     maxSeeds:              { type: "number",  default: 50,    min: 1,    max: 500 },
     maxForwardPerSeed:     { type: "number",  default: 100,   min: 0,    max: 1000 },
     maxBackwardPerSeed:    { type: "number",  default: 100,   min: 0,    max: 1000 },
     maxCandidatesTotal:    { type: "number",  default: 500,   min: 1,    max: 10000 },
     requestTimeoutMs:      { type: "number",  default: 30000, min: 1000, max: 120000 },
-    minCitedBy:            { type: "number",  default: 0,     min: 0,    max: 100000 }
+    minCitedBy:            { type: "number",  default: 0,     min: 0,    max: 100000 },
+    // Column visibility. Pref names match the dialog's table column ids.
+    "columns.score":       { type: "boolean", default: true },
+    "columns.direction":   { type: "boolean", default: true },
+    "columns.status":      { type: "boolean", default: true },
+    "columns.year":        { type: "boolean", default: true },
+    "columns.authors":     { type: "boolean", default: true },
+    "columns.venue":       { type: "boolean", default: true },
+    "columns.citedBy":     { type: "boolean", default: true }
   },
 
   // The 7 ranking weights live in their own pref namespace so a
@@ -48,7 +57,7 @@ var SnowballPrefs = {
     try {
       this.args = args || {};
       for (const [name, spec] of Object.entries(this.schema)) {
-        const input = document.getElementById(`pref-${name}`);
+        const input = document.getElementById(`pref-${name.replace(/\./g, "-")}`);
         if (!input) continue;
         const value = this.args.plugin
           ? this.args.plugin.pref(name, spec.default)
@@ -97,7 +106,7 @@ var SnowballPrefs = {
   validate() {
     const result = { values: {}, errors: [] };
     for (const [name, spec] of Object.entries(this.schema)) {
-      const input = document.getElementById(`pref-${name}`);
+      const input = document.getElementById(`pref-${name.replace(/\./g, "-")}`);
       if (!input) continue;
       if (spec.type === "boolean") {
         result.values[name] = !!input.checked;

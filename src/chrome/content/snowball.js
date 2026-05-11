@@ -86,6 +86,108 @@ var SnowballSourcesPlugin = class {
   addToWindow(window) {
     this.windows.add(window);
     window.MozXULElement.insertFTLIfNeeded("snowball-sources.ftl");
+    this._installToolbarButton(window);
+    this._installKeyboardShortcut(window);
+  }
+
+  /**
+   * Inject a toolbar button into the Zotero main toolbar so the snowball
+   * action is discoverable without diving into context menus. Falls back
+   * silently (logging) if the expected toolbar isn't present in this
+   * window — never throws into Zotero's bootstrap path.
+   */
+  _installToolbarButton(window) {
+    try {
+      const doc = window.document;
+      if (doc.getElementById("snowball-toolbar-button")) return;
+
+      // Zotero exposes its primary item toolbar as #zotero-tb. We also
+      // look at a few neighbors in case the structure differs across
+      // Zotero versions.
+      const candidates = [
+        "zotero-tb",
+        "zotero-toolbar",
+        "main-toolbar"
+      ];
+      let toolbar = null;
+      for (const id of candidates) {
+        toolbar = doc.getElementById(id);
+        if (toolbar) break;
+      }
+      if (!toolbar) {
+        if (typeof SnowballLog !== "undefined") {
+          SnowballLog.debug("toolbar not found; skipping toolbar button");
+        }
+        return;
+      }
+
+      const button = doc.createXULElement("toolbarbutton");
+      button.id = "snowball-toolbar-button";
+      button.className = "zotero-tb-button";
+      button.setAttribute("tooltiptext", "Snowball Sources (⌘⇧S)");
+      button.setAttribute("label", "Snowball Sources");
+      button.setAttribute("image", this.rootURI + "icons/toolbar-16.png");
+      button.addEventListener("command", () => {
+        this.runForCurrentSelection().catch(error => {
+          try {
+            if (typeof SnowballLog !== "undefined") {
+              SnowballLog.error("toolbar action failed", { error: SnowballLog.formatError(error) });
+            }
+          } catch (_) { /* ignore */ }
+        });
+      });
+      toolbar.appendChild(button);
+    } catch (error) {
+      try {
+        if (typeof SnowballLog !== "undefined") {
+          SnowballLog.warn("toolbar button install failed", { error: SnowballLog.formatError(error) });
+        }
+      } catch (_) { /* ignore */ }
+    }
+  }
+
+  /**
+   * Register a keyboard shortcut on the window so Snowball Sources can be
+   * triggered without touching the mouse. We use `accel,shift` so it maps
+   * to ⌘⇧S on macOS and Ctrl+Shift+S elsewhere — the conventional
+   * "intentional plugin action" modifier set on this platform family.
+   */
+  _installKeyboardShortcut(window) {
+    try {
+      const doc = window.document;
+      if (doc.getElementById("snowball-key")) return;
+
+      // Zotero's main keyset is `mainKeyset`. Fall back to creating a
+      // bound keyset if that's not present.
+      let keyset = doc.getElementById("mainKeyset");
+      if (!keyset) {
+        keyset = doc.createXULElement("keyset");
+        keyset.id = "snowball-keyset";
+        doc.documentElement.appendChild(keyset);
+      }
+
+      const key = doc.createXULElement("key");
+      key.id = "snowball-key";
+      key.setAttribute("key", "S");
+      key.setAttribute("modifiers", "accel,shift");
+      // XUL <key> dispatches `command` events when the shortcut fires.
+      key.addEventListener("command", () => {
+        this.runForCurrentSelection().catch(error => {
+          try {
+            if (typeof SnowballLog !== "undefined") {
+              SnowballLog.error("keyboard action failed", { error: SnowballLog.formatError(error) });
+            }
+          } catch (_) { /* ignore */ }
+        });
+      });
+      keyset.appendChild(key);
+    } catch (error) {
+      try {
+        if (typeof SnowballLog !== "undefined") {
+          SnowballLog.warn("keyboard shortcut install failed", { error: SnowballLog.formatError(error) });
+        }
+      } catch (_) { /* ignore */ }
+    }
   }
 
   addToAllWindows() {
@@ -97,6 +199,11 @@ var SnowballSourcesPlugin = class {
   removeFromWindow(window) {
     this.windows.delete(window);
     window.document.querySelector('[href="snowball-sources.ftl"]')?.remove();
+    // Remove the toolbar button and keyboard shortcut we injected, plus
+    // the keyset we may have created if Zotero didn't have one.
+    try { window.document.getElementById("snowball-toolbar-button")?.remove(); } catch (_) {}
+    try { window.document.getElementById("snowball-key")?.remove(); } catch (_) {}
+    try { window.document.getElementById("snowball-keyset")?.remove(); } catch (_) {}
   }
 
   shutdown() {
@@ -191,11 +298,24 @@ var SnowballSourcesPlugin = class {
         return;
       }
 
+      // Column-visibility prefs. Title is intentionally absent — it's
+      // always shown.
+      const columns = {
+        score:     this.prefBool("columns.score",     true),
+        direction: this.prefBool("columns.direction", true),
+        status:    this.prefBool("columns.status",    true),
+        year:      this.prefBool("columns.year",      true),
+        authors:   this.prefBool("columns.authors",   true),
+        venue:     this.prefBool("columns.venue",     true),
+        citedBy:   this.prefBool("columns.citedBy",   true)
+      };
+
       this.openReviewDialog({
         seeds: seedRecords,
         target,
         providerConfig,
         weights,
+        columns,
         flags: {
           skipAlreadyInLibrary: this.prefBool("skipAlreadyInLibrary", true),
           minCitedBy:           this.prefInt("minCitedBy", 0, 0, 100000)
@@ -249,7 +369,9 @@ var SnowballSourcesPlugin = class {
   }
 
   async addCandidatesToZotero(candidates, target) {
-    return SnowballZoteroItems.addCandidates(candidates, target);
+    return SnowballZoteroItems.addCandidates(candidates, target, {
+      downloadPDFs: this.prefBool("downloadPDFs", true)
+    });
   }
 
   pref(name, fallback) {

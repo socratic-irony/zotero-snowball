@@ -51,6 +51,11 @@
         <html:input id="pref-skipAlreadyInLibrary" type="checkbox"/>
         <html:span>Uncheck candidates already in your library by default</html:span>
       </html:label>
+
+      <html:label class="row inline">
+        <html:input id="pref-downloadPDFs" type="checkbox"/>
+        <html:span>Auto-download open-access PDFs for new items</html:span>
+      </html:label>
     </html:section>
 
     <html:section>
@@ -80,6 +85,45 @@
         <html:span class="label">Default min cited-by count</html:span>
         <html:input id="pref-minCitedBy" type="number" min="0" max="100000"/>
       </html:label>
+    </html:section>
+
+    <html:section>
+      <html:h2>Columns</html:h2>
+      <html:p class="hint">
+        Show or hide columns in the review table. Title is always shown.
+        Changes take effect the next time you open the snowball dialog.
+      </html:p>
+
+      <html:div class="snowball-columns-grid">
+        <html:label class="row inline">
+          <html:input id="pref-columns-score" type="checkbox"/>
+          <html:span>Score</html:span>
+        </html:label>
+        <html:label class="row inline">
+          <html:input id="pref-columns-direction" type="checkbox"/>
+          <html:span>Direction</html:span>
+        </html:label>
+        <html:label class="row inline">
+          <html:input id="pref-columns-status" type="checkbox"/>
+          <html:span>Status</html:span>
+        </html:label>
+        <html:label class="row inline">
+          <html:input id="pref-columns-year" type="checkbox"/>
+          <html:span>Year</html:span>
+        </html:label>
+        <html:label class="row inline">
+          <html:input id="pref-columns-authors" type="checkbox"/>
+          <html:span>Authors</html:span>
+        </html:label>
+        <html:label class="row inline">
+          <html:input id="pref-columns-venue" type="checkbox"/>
+          <html:span>Venue</html:span>
+        </html:label>
+        <html:label class="row inline">
+          <html:input id="pref-columns-citedBy" type="checkbox"/>
+          <html:span>Cited By</html:span>
+        </html:label>
+      </html:div>
     </html:section>
 
     <html:section>

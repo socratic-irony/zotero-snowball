@@ -768,3 +768,19 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================
+ * Column visibility
+ *
+ * Each `hide-col-X` class on the dialog root collapses the matching
+ * column's <th> and <td>. Keep these rules grouped so the mapping
+ * between pref names and CSS classes is obvious.
+ * ============================================================ */
+
+.snowball-dialog.hide-col-score      .col-score     { display: none; }
+.snowball-dialog.hide-col-direction  .col-direction { display: none; }
+.snowball-dialog.hide-col-status     .col-status    { display: none; }
+.snowball-dialog.hide-col-year       .col-year      { display: none; }
+.snowball-dialog.hide-col-authors    .col-authors   { display: none; }
+.snowball-dialog.hide-col-venue      .col-venue     { display: none; }
+.snowball-dialog.hide-col-citedBy    .col-cited     { display: none; }

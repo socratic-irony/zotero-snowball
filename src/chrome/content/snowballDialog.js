@@ -67,6 +67,7 @@ var SnowballDialog = {
     this.bindControls();
     this.initSplitter();
     this.applyUIState(this.args.uiState);
+    this.applyColumnVisibility(this.args.columns);
     this.refresh();
 
     // Pre-loaded mode (used by tests / future caller that already has
@@ -595,6 +596,23 @@ var SnowballDialog = {
         );
       }
     } catch (_) { /* ignore */ }
+  },
+
+  /**
+   * Toggle column visibility based on prefs. We add `hide-col-X` classes
+   * on the dialog root; CSS rules pair those classes with the existing
+   * `col-X` class on every <th>/<td> to set `display: none`. Title is
+   * intentionally never hidden.
+   */
+  applyColumnVisibility(columns) {
+    if (!columns || typeof columns !== "object") return;
+    const dialog = document.querySelector(".snowball-dialog");
+    if (!dialog) return;
+    for (const [key, visible] of Object.entries(columns)) {
+      const cls = `hide-col-${key}`;
+      if (visible === false) dialog.classList.add(cls);
+      else                   dialog.classList.remove(cls);
+    }
   },
 
   _scheduleUIStateSave() {
@@ -1220,8 +1238,9 @@ var SnowballDialog = {
       const addedN   = result?.added?.length   || 0;
       const skippedN = result?.skipped?.length || 0;
       const failedN  = failed.length;
+      const pdfsN    = Number(result?.downloadsStarted) || 0;
 
-      const summary = this._formatAddSummary(addedN, skippedN, failedN);
+      const summary = this._formatAddSummary(addedN, skippedN, failedN, pdfsN);
 
       if (failedN === 0) {
         // Happy path: brief confirmation, then close the dialog.
@@ -1258,13 +1277,13 @@ var SnowballDialog = {
     }
   },
 
-  _formatAddSummary(addedN, skippedN, failedN) {
+  _formatAddSummary(addedN, skippedN, failedN, pdfsN = 0) {
     const parts = [];
     if (addedN > 0)   parts.push(`Added ${addedN} ${addedN === 1 ? "item" : "items"} to Zotero`);
     if (skippedN > 0) parts.push(`updated ${skippedN} existing`);
     if (failedN > 0)  parts.push(`${failedN} couldn't be added`);
+    if (pdfsN > 0)    parts.push(`downloading ${pdfsN} PDF${pdfsN === 1 ? "" : "s"} in the background`);
     if (!parts.length) return "Nothing added.";
-    // Capitalize first; join with appropriate punctuation.
     let joined = parts.join("; ");
     return joined.charAt(0).toUpperCase() + joined.slice(1);
   },

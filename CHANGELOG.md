@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] – 2026-05-10
+
+### Added
+- **Auto PDF retrieval on add.** When OpenAlex returns a
+  `best_oa_location.pdf_url` for a candidate (open-access works), the
+  plugin now kicks off `Zotero.Attachments.importFromURL` for each new
+  item right after the bulk-add transaction commits. Downloads run in
+  the background — the dialog closes immediately and Zotero's own
+  notifier shows progress. Failures are logged via SnowballLog but
+  don't roll back the item. New pref
+  `extensions.snowballSources.downloadPDFs` (default `true`) toggles
+  the behavior. The completion toast reports the count:
+  "Added 5 items; downloading 3 PDFs in the background."
+- **Column visibility prefs.** Show or hide any of the six
+  non-essential columns (Score / Direction / Status / Year / Authors /
+  Venue / Cited By) — Title is always shown. Configured in the new
+  "Columns" section of `Tools → Snowball Sources Preferences…` and
+  applied on next dialog open. Backed by individual prefs under
+  `extensions.snowballSources.columns.*` so they sync per-profile.
+- **Toolbar button + keyboard shortcut.** Snowball now lives on
+  Zotero's main toolbar (using the project icon, scaled to 16/32 px
+  for HiDPI) with a `⌘⇧S` / `Ctrl+Shift+S` keyboard shortcut. The
+  button and shortcut run "Snowball Sources for Selected Item(s)"
+  exactly as the right-click and Tools menu items do. Both are
+  cleaned up on plugin shutdown. Falls back silently if Zotero's
+  expected toolbar/keyset ids aren't present in this version.
+
+### Changed
+- `SnowballZoteroItems.addCandidates()` signature gained an optional
+  `opts` object (`{ downloadPDFs }`); the return value gained a
+  `downloadsStarted` count. Tests still cover the prior shape.
+
 ## [0.4.2] – 2026-05-08
 
 ### Changed
@@ -247,7 +279,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/socratic-irony/zotero-snowball/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.3.1...v0.4.0
