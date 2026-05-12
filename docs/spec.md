@@ -395,7 +395,7 @@ var SnowballSourcesPlugin = class {
             l10nID: "snowball-sources-menu-selected",
             onShowing: (event, context) => {
               context.setVisible(
-                !!context.items?.some(item => item.isRegularItem && item.isRegularItem())
+                !!context.items?.some((item) => item.isRegularItem && item.isRegularItem())
               );
             },
             onCommand: async (event, context) => {
@@ -472,7 +472,7 @@ var SnowballSourcesPlugin = class {
 
   async runForCurrentSelection() {
     const pane = Zotero.getActiveZoteroPane();
-    const items = pane.getSelectedItems().filter(item => item.isRegularItem());
+    const items = pane.getSelectedItems().filter((item) => item.isRegularItem());
     if (items.length) {
       await this.runForItems(items);
       return;
@@ -485,12 +485,12 @@ var SnowballSourcesPlugin = class {
   }
 
   async runForCollection(collection) {
-    const items = collection.getChildItems().filter(item => item.isRegularItem());
+    const items = collection.getChildItems().filter((item) => item.isRegularItem());
     await this.runForItems(items, collection);
   }
 
   async runForItems(items, explicitCollection = null) {
-    const regularItems = items.filter(item => item.isRegularItem());
+    const regularItems = items.filter((item) => item.isRegularItem());
 
     if (!regularItems.length) {
       this.alert("No regular Zotero items selected.");
@@ -505,8 +505,10 @@ var SnowballSourcesPlugin = class {
 
     const provider = new OpenAlexProvider({
       apiKey: Zotero.Prefs.get("extensions.snowballSources.openAlexAPIKey", true),
-      maxForwardPerSeed: Zotero.Prefs.get("extensions.snowballSources.maxForwardPerSeed", true) || 100,
-      maxBackwardPerSeed: Zotero.Prefs.get("extensions.snowballSources.maxBackwardPerSeed", true) || 100
+      maxForwardPerSeed:
+        Zotero.Prefs.get("extensions.snowballSources.maxForwardPerSeed", true) || 100,
+      maxBackwardPerSeed:
+        Zotero.Prefs.get("extensions.snowballSources.maxBackwardPerSeed", true) || 100
     });
 
     const candidates = await provider.snowball(seedRecords);
@@ -567,7 +569,7 @@ var SnowballZoteroItems = {
   },
 
   extractSeedRecords(items) {
-    return items.map(item => ({
+    return items.map((item) => ({
       zoteroItemID: item.id,
       libraryID: item.libraryID,
       key: item.key,
@@ -670,7 +672,10 @@ var SnowballZoteroItems = {
     item.libraryID = libraryID;
 
     item.setField("title", candidate.title || "");
-    item.setField("date", candidate.publicationDate || (candidate.year ? String(candidate.year) : ""));
+    item.setField(
+      "date",
+      candidate.publicationDate || (candidate.year ? String(candidate.year) : "")
+    );
     item.setField("DOI", this.normalizeDOI(candidate.doi || ""));
     item.setField("url", candidate.url || "");
     item.setField("abstractNote", candidate.abstract || "");
@@ -680,11 +685,13 @@ var SnowballZoteroItems = {
     }
 
     if (candidate.authors?.length) {
-      item.setCreators(candidate.authors.map(author => ({
-        firstName: author.firstName || "",
-        lastName: author.lastName || author.name || "",
-        creatorType: "author"
-      })));
+      item.setCreators(
+        candidate.authors.map((author) => ({
+          firstName: author.firstName || "",
+          lastName: author.lastName || author.name || "",
+          creatorType: "author"
+        }))
+      );
     }
 
     return item;
@@ -838,10 +845,12 @@ var OpenAlexProvider = class {
     const ids = (work.referenced_works || []).slice(0, this.maxBackwardPerSeed);
     const works = await this.batchGetWorksByOpenAlexIDs(ids);
 
-    return works.map(candidate => this.normalizeCandidate(candidate, {
-      direction: "backward",
-      seed
-    }));
+    return works.map((candidate) =>
+      this.normalizeCandidate(candidate, {
+        direction: "backward",
+        seed
+      })
+    );
   }
 
   async getForwardCitations(seed, work) {
@@ -856,16 +865,16 @@ var OpenAlexProvider = class {
     const response = await this.fetchJSON(url);
     const results = response.results || [];
 
-    return results.map(candidate => this.normalizeCandidate(candidate, {
-      direction: "forward",
-      seed
-    }));
+    return results.map((candidate) =>
+      this.normalizeCandidate(candidate, {
+        direction: "forward",
+        seed
+      })
+    );
   }
 
   async batchGetWorksByOpenAlexIDs(ids) {
-    const cleanIDs = ids
-      .map(id => this.shortOpenAlexID(id))
-      .filter(Boolean);
+    const cleanIDs = ids.map((id) => this.shortOpenAlexID(id)).filter(Boolean);
 
     const chunks = SnowballUtil.chunk(cleanIDs, 100);
     const all = [];
@@ -885,10 +894,7 @@ var OpenAlexProvider = class {
   }
 
   normalizeCandidate(work, { direction, seed }) {
-    const location =
-      work.primary_location ||
-      work.best_oa_location ||
-      {};
+    const location = work.primary_location || work.best_oa_location || {};
 
     const source = location.source || {};
     const doi = work.doi || work.ids?.doi || "";
@@ -930,7 +936,7 @@ var OpenAlexProvider = class {
   }
 
   extractAuthors(authorships) {
-    return authorships.map(authorship => {
+    return authorships.map((authorship) => {
       const display = authorship.author?.display_name || "";
       const parts = display.trim().split(/\s+/);
       return {
@@ -954,13 +960,13 @@ var OpenAlexProvider = class {
   async fetchJSON(url, attempt = 1) {
     const response = await fetch(url.toString(), {
       headers: {
-        "Accept": "application/json"
+        Accept: "application/json"
       }
     });
 
     if (response.status === 429 && attempt <= 4) {
       const delay = Math.pow(2, attempt) * 1000;
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
       return this.fetchJSON(url, attempt + 1);
     }
 
@@ -985,10 +991,7 @@ var OpenAlexProvider = class {
 
       const existing = seen.get(key);
 
-      existing.direction =
-        existing.direction === candidate.direction
-          ? existing.direction
-          : "both";
+      existing.direction = existing.direction === candidate.direction ? existing.direction : "both";
 
       existing.citedByCount = Math.max(existing.citedByCount || 0, candidate.citedByCount || 0);
 
@@ -1025,7 +1028,7 @@ MVP ranking should be fast and local. Use title + abstract token overlap against
 var SnowballRanking = {
   scoreCandidates(candidates, seedRecords) {
     const seedText = seedRecords
-      .map(seed => `${seed.title || ""} ${seed.abstract || ""}`)
+      .map((seed) => `${seed.title || ""} ${seed.abstract || ""}`)
       .join(" ");
 
     const seedVector = this.termVector(seedText);
@@ -1061,16 +1064,39 @@ var SnowballRanking = {
 
   tokenize(text) {
     const stop = new Set([
-      "the", "and", "for", "with", "that", "this", "from", "are", "was",
-      "were", "have", "has", "had", "not", "but", "can", "may", "using",
-      "use", "used", "into", "their", "there", "these", "those", "than"
+      "the",
+      "and",
+      "for",
+      "with",
+      "that",
+      "this",
+      "from",
+      "are",
+      "was",
+      "were",
+      "have",
+      "has",
+      "had",
+      "not",
+      "but",
+      "can",
+      "may",
+      "using",
+      "use",
+      "used",
+      "into",
+      "their",
+      "there",
+      "these",
+      "those",
+      "than"
     ]);
 
     return String(text)
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, " ")
       .split(/\s+/)
-      .filter(token => token.length > 2 && !stop.has(token));
+      .filter((token) => token.length > 2 && !stop.has(token));
   },
 
   cosine(a, b) {
@@ -1212,10 +1238,9 @@ var SnowballDialog = {
     this.args = args;
     this.candidates = args.candidates || [];
 
-    document.getElementById("snowball-summary").setAttribute(
-      "value",
-      `${this.candidates.length} candidate sources found`
-    );
+    document
+      .getElementById("snowball-summary")
+      .setAttribute("value", `${this.candidates.length} candidate sources found`);
 
     this.renderTable();
   },

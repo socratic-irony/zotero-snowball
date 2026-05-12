@@ -8,9 +8,21 @@ const ROOT = path.resolve(__dirname, "..");
 
 function loadModules(names, extra = {}) {
   const ctx = vm.createContext({
-    console, URL, fetch, AbortController, DOMException,
-    setTimeout, clearTimeout, Math, Date, JSON, Promise, Error,
-    Float32Array, Map, Set,
+    console,
+    URL,
+    fetch,
+    AbortController,
+    DOMException,
+    setTimeout,
+    clearTimeout,
+    Math,
+    Date,
+    JSON,
+    Promise,
+    Error,
+    Float32Array,
+    Map,
+    Set,
     Zotero: { debug() {} },
     ...extra
   });
@@ -112,15 +124,29 @@ test("scoreCandidate rewards bibliographic coupling", () => {
 
   // Give both candidates an abstract so the abstract penalty doesn't clamp
   // small score differences to 0 below the floor.
-  const lowOverlap  = { title: "p", abstract: "x", referencedWorks: ["A"], authors: [], citedByCount: 1 };
-  const highOverlap = { title: "p", abstract: "x", referencedWorks: ["A","B","C","D","E"], authors: [], citedByCount: 1 };
+  const lowOverlap = {
+    title: "p",
+    abstract: "x",
+    referencedWorks: ["A"],
+    authors: [],
+    citedByCount: 1
+  };
+  const highOverlap = {
+    title: "p",
+    abstract: "x",
+    referencedWorks: ["A", "B", "C", "D", "E"],
+    authors: [],
+    citedByCount: 1
+  };
 
   SnowballRanking.scoreCandidate(lowOverlap, ctx);
   SnowballRanking.scoreCandidate(highOverlap, ctx);
 
   assert.ok(highOverlap._scoreBreakdown.bibCouplingRaw > lowOverlap._scoreBreakdown.bibCouplingRaw);
-  assert.ok(highOverlap.relevanceScore > lowOverlap.relevanceScore,
-    `expected higher score for higher overlap (${highOverlap.relevanceScore} vs ${lowOverlap.relevanceScore})`);
+  assert.ok(
+    highOverlap.relevanceScore > lowOverlap.relevanceScore,
+    `expected higher score for higher overlap (${highOverlap.relevanceScore} vs ${lowOverlap.relevanceScore})`
+  );
 });
 
 test("scoreCandidate rewards co-citation across seeds", () => {
@@ -138,7 +164,7 @@ test("scoreCandidate rewards co-citation across seeds", () => {
   const ctx = SnowballRanking.buildSeedContext(seeds, works);
 
   const referencedByAll = { openAlexID: "WC", title: "candidate", authors: [], citedByCount: 0 };
-  const referencedByOne = { openAlexID: "X",  title: "candidate", authors: [], citedByCount: 0 };
+  const referencedByOne = { openAlexID: "X", title: "candidate", authors: [], citedByCount: 0 };
 
   SnowballRanking.scoreCandidate(referencedByAll, ctx);
   SnowballRanking.scoreCandidate(referencedByOne, ctx);
@@ -151,15 +177,19 @@ test("scoreCandidate rewards co-citation across seeds", () => {
 test("scoreCandidate rewards author overlap with the seed pool", () => {
   const { SnowballRanking } = makeRanking();
   const seeds = [
-    { title: "x", abstract: "", creators: [
-      { firstName: "Alice", lastName: "Author" },
-      { firstName: "Bob", lastName: "Buddy" }
-    ]}
+    {
+      title: "x",
+      abstract: "",
+      creators: [
+        { firstName: "Alice", lastName: "Author" },
+        { firstName: "Bob", lastName: "Buddy" }
+      ]
+    }
   ];
   const ctx = SnowballRanking.buildSeedContext(seeds, []);
 
   const sharedAuthor = { title: "p", authors: [{ firstName: "Alice", lastName: "Author" }] };
-  const noShared    = { title: "p", authors: [{ firstName: "Carol", lastName: "Other" }] };
+  const noShared = { title: "p", authors: [{ firstName: "Carol", lastName: "Other" }] };
 
   SnowballRanking.scoreCandidate(sharedAuthor, ctx);
   SnowballRanking.scoreCandidate(noShared, ctx);
@@ -174,12 +204,14 @@ test("scoreCandidate rewards near-duplicate titles via trigram Jaccard", () => {
   const ctx = SnowballRanking.buildSeedContext(seeds, []);
 
   const paraphrase = { title: "Attention is All You Need: Revisited" };
-  const unrelated  = { title: "On the dynamics of polymer chains" };
+  const unrelated = { title: "On the dynamics of polymer chains" };
 
   SnowballRanking.scoreCandidate(paraphrase, ctx);
   SnowballRanking.scoreCandidate(unrelated, ctx);
-  assert.ok(paraphrase._scoreBreakdown.titleTrigram > 0.5,
-    `expected high trigram-Jaccard for near-duplicate, got ${paraphrase._scoreBreakdown.titleTrigram}`);
+  assert.ok(
+    paraphrase._scoreBreakdown.titleTrigram > 0.5,
+    `expected high trigram-Jaccard for near-duplicate, got ${paraphrase._scoreBreakdown.titleTrigram}`
+  );
   assert.ok(unrelated._scoreBreakdown.titleTrigram < 0.2);
 });
 
@@ -200,8 +232,10 @@ test("buildSeedContext + scoreCandidate honor user-supplied weight overrides", (
   SnowballRanking.scoreCandidate(a, defaultCtx);
   SnowballRanking.scoreCandidate(b, noEmbedCtx);
   // With embedding zeroed, the score should drop below the default-weight one.
-  assert.ok(a.relevanceScore > b.relevanceScore,
-    `expected default-weights score (${a.relevanceScore}) > zero-embedding-weights score (${b.relevanceScore})`);
+  assert.ok(
+    a.relevanceScore > b.relevanceScore,
+    `expected default-weights score (${a.relevanceScore}) > zero-embedding-weights score (${b.relevanceScore})`
+  );
 });
 
 test("scoreCandidate mixes embedding similarity when present", () => {
@@ -209,7 +243,7 @@ test("scoreCandidate mixes embedding similarity when present", () => {
   const seeds = [{ title: "x", abstract: "" }];
   const ctx = SnowballRanking.buildSeedContext(seeds, []);
 
-  const noEmbed   = { title: "p", authors: [], citedByCount: 0 };
+  const noEmbed = { title: "p", authors: [], citedByCount: 0 };
   const withEmbed = { title: "p", authors: [], citedByCount: 0, _embeddingSimilarity: 0.9 };
 
   SnowballRanking.scoreCandidate(noEmbed, ctx);
@@ -227,7 +261,10 @@ test("SemanticScholarProvider is disabled with no API key (no traffic)", async (
   // contact S2 without a key.
   let fetchCalled = false;
   const ctx = loadModules(["log.js", "errors.js", "http.js", "semanticscholar.js"], {
-    fetch: async () => { fetchCalled = true; throw new Error("should not be called"); }
+    fetch: async () => {
+      fetchCalled = true;
+      throw new Error("should not be called");
+    }
   });
   const s2 = new ctx.SemanticScholarProvider({ apiKey: "" });
   assert.equal(s2.isEnabled(), false);
@@ -244,6 +281,7 @@ test("SemanticScholarProvider is enabled when an API key is provided", () => {
 
 test("SemanticScholarProvider trims and dedups DOIs before requesting", async () => {
   // Capture what the provider would send to SnowballHTTP.fetchJSON.
+  /** @type {{ url: string, opts: any } | null} */
   let captured = null;
   const ctx = loadModules(["log.js", "errors.js", "http.js", "semanticscholar.js"]);
   ctx.SnowballHTTP.fetchJSON = async (url, opts) => {
@@ -251,13 +289,10 @@ test("SemanticScholarProvider trims and dedups DOIs before requesting", async ()
     return [];
   };
   const s2 = new ctx.SemanticScholarProvider({ apiKey: "key" });
-  await s2.fetchEmbeddings([
-    " 10.0/A ",
-    "10.0/A",
-    "https://doi.org/10.0/B",
-    "DOI:10.0/C",
-    ""
-  ], null);
+  await s2.fetchEmbeddings(
+    [" 10.0/A ", "10.0/A", "https://doi.org/10.0/B", "DOI:10.0/C", ""],
+    null
+  );
   assert.ok(captured, "expected an HTTP request");
   const body = JSON.parse(captured.opts.body);
   assert.deepEqual(body.ids.sort(), ["DOI:10.0/a", "DOI:10.0/b", "DOI:10.0/c"]);

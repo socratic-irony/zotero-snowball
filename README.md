@@ -62,19 +62,20 @@ Right-click a collection → **Snowball Sources for Collection**. Same dialog; t
 
 ### The review dialog
 
-| Element                              | Behavior                                                                                  |
-| ------------------------------------ | ----------------------------------------------------------------------------------------- |
-| Filter box                           | Live substring filter on title / authors / venue. `⌘F` / `Ctrl+F` focuses it.             |
-| Direction dropdown                   | All / Backward only / Forward only.                                                       |
-| "Hide items already in library"      | Filters out candidates already present in your library.                                   |
-| Column headers                       | Click to sort. Click again to flip direction. Numeric columns default to descending.      |
-| Header checkbox                      | Tri-state: select/deselect every *visible* row.                                           |
-| Splitter (vertical bar)              | Drag to resize the details pane. Double-click to reset.                                   |
-| Stop button (during loading)         | Aborts the in-flight fetch and keeps everything that's already arrived.                   |
-| Selection count (bottom-left)        | Live count of checked candidates across all filters.                                      |
-| Add Selected to Zotero               | Adds + tags the checked candidates. Reports added / skipped / failed counts when done.    |
+| Element                         | Behavior                                                                               |
+| ------------------------------- | -------------------------------------------------------------------------------------- |
+| Filter box                      | Live substring filter on title / authors / venue. `⌘F` / `Ctrl+F` focuses it.          |
+| Direction dropdown              | All / Backward only / Forward only.                                                    |
+| "Hide items already in library" | Filters out candidates already present in your library.                                |
+| Column headers                  | Click to sort. Click again to flip direction. Numeric columns default to descending.   |
+| Header checkbox                 | Tri-state: select/deselect every _visible_ row.                                        |
+| Splitter (vertical bar)         | Drag to resize the details pane. Double-click to reset.                                |
+| Stop button (during loading)    | Aborts the in-flight fetch and keeps everything that's already arrived.                |
+| Selection count (bottom-left)   | Live count of checked candidates across all filters.                                   |
+| Add Selected to Zotero          | Adds + tags the checked candidates. Reports added / skipped / failed counts when done. |
 
 Added items are tagged automatically:
+
 - `snowballed`
 - `snowball:openalex`
 - `snowball:forward` / `snowball:backward` (or both)
@@ -86,18 +87,18 @@ Added items are tagged automatically:
 
 `Tools → Snowball Sources Preferences…`
 
-| Pref name                                          | Default | Range / notes                                                |
-| -------------------------------------------------- | ------- | ------------------------------------------------------------ |
+| Pref name                                          | Default | Range / notes                                                  |
+| -------------------------------------------------- | ------- | -------------------------------------------------------------- |
 | `extensions.snowballSources.openAlexAPIKey`        | `""`    | Optional. Joins OpenAlex's polite pool for higher reliability. |
-| `extensions.snowballSources.semanticScholarAPIKey` | `""`    | Optional. Reserved for future enrichment; not yet called.    |
-| `extensions.snowballSources.includeForward`        | `true`  | Fetch papers that **cite** each seed.                        |
-| `extensions.snowballSources.includeBackward`       | `true`  | Fetch papers each seed **references**.                       |
-| `extensions.snowballSources.skipAlreadyInLibrary`  | `true`  | Uncheck candidates already in library by default.            |
-| `extensions.snowballSources.maxSeeds`              | `50`    | 1–500.                                                       |
-| `extensions.snowballSources.maxForwardPerSeed`     | `100`   | 0–1000.                                                      |
-| `extensions.snowballSources.maxBackwardPerSeed`    | `100`   | 0–1000.                                                      |
-| `extensions.snowballSources.maxCandidatesTotal`    | `500`   | 1–10000. Hard cap across all seeds combined.                 |
-| `extensions.snowballSources.requestTimeoutMs`      | `30000` | 1000–120000. Per-request timeout (ms).                       |
+| `extensions.snowballSources.semanticScholarAPIKey` | `""`    | Optional. Reserved for future enrichment; not yet called.      |
+| `extensions.snowballSources.includeForward`        | `true`  | Fetch papers that **cite** each seed.                          |
+| `extensions.snowballSources.includeBackward`       | `true`  | Fetch papers each seed **references**.                         |
+| `extensions.snowballSources.skipAlreadyInLibrary`  | `true`  | Uncheck candidates already in library by default.              |
+| `extensions.snowballSources.maxSeeds`              | `50`    | 1–500.                                                         |
+| `extensions.snowballSources.maxForwardPerSeed`     | `100`   | 0–1000.                                                        |
+| `extensions.snowballSources.maxBackwardPerSeed`    | `100`   | 0–1000.                                                        |
+| `extensions.snowballSources.maxCandidatesTotal`    | `500`   | 1–10000. Hard cap across all seeds combined.                   |
+| `extensions.snowballSources.requestTimeoutMs`      | `30000` | 1000–120000. Per-request timeout (ms).                         |
 
 Out-of-range values are clamped on save and you'll be shown a confirmation dialog listing what was adjusted.
 
@@ -168,19 +169,19 @@ User → Right-click → Snowball Sources
 
 ### Module map
 
-| File                                                            | Responsibility                                                              |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [`bootstrap.js`](src/bootstrap.js)                              | Zotero plugin lifecycle. Loads modules in dependency order.                 |
-| [`chrome/content/snowball.js`](src/chrome/content/snowball.js)  | Top-level controller: menus, prefs, opens review/prefs dialogs.             |
-| [`chrome/content/snowballDialog.{xhtml,js,css}`](src/chrome/content/) | Streaming review dialog.                                                    |
-| [`chrome/content/snowballPrefs.{xhtml,js,css}`](src/chrome/content/)  | Preferences dialog with bounds-validated inputs.                            |
-| [`modules/log.js`](src/chrome/content/modules/log.js)           | Centralized logger with secret-scrubbing.                                   |
-| [`modules/errors.js`](src/chrome/content/modules/errors.js)     | `SnowballError` class + `formatUserError`.                                  |
-| [`modules/http.js`](src/chrome/content/modules/http.js)         | Hardened fetch wrapper: timeouts, retries, host allowlist, scheme guard.    |
-| [`modules/openalex.js`](src/chrome/content/modules/openalex.js) | OpenAlex provider with streaming `streamSnowball` async generator.          |
-| [`modules/ranking.js`](src/chrome/content/modules/ranking.js)   | Per-candidate relevance scoring (cosine over title+abstract terms).         |
-| [`modules/zoteroItems.js`](src/chrome/content/modules/zoteroItems.js) | Seed extraction, library-existence check, item creation per Zotero type.   |
-| [`modules/util.js`](src/chrome/content/modules/util.js)         | Small helpers (`chunk`, `normalizeText`, `formatScore`).                    |
+| File                                                                  | Responsibility                                                           |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [`bootstrap.js`](src/bootstrap.js)                                    | Zotero plugin lifecycle. Loads modules in dependency order.              |
+| [`chrome/content/snowball.js`](src/chrome/content/snowball.js)        | Top-level controller: menus, prefs, opens review/prefs dialogs.          |
+| [`chrome/content/snowballDialog.{xhtml,js,css}`](src/chrome/content/) | Streaming review dialog.                                                 |
+| [`chrome/content/snowballPrefs.{xhtml,js,css}`](src/chrome/content/)  | Preferences dialog with bounds-validated inputs.                         |
+| [`modules/log.js`](src/chrome/content/modules/log.js)                 | Centralized logger with secret-scrubbing.                                |
+| [`modules/errors.js`](src/chrome/content/modules/errors.js)           | `SnowballError` class + `formatUserError`.                               |
+| [`modules/http.js`](src/chrome/content/modules/http.js)               | Hardened fetch wrapper: timeouts, retries, host allowlist, scheme guard. |
+| [`modules/openalex.js`](src/chrome/content/modules/openalex.js)       | OpenAlex provider with streaming `streamSnowball` async generator.       |
+| [`modules/ranking.js`](src/chrome/content/modules/ranking.js)         | Per-candidate relevance scoring (cosine over title+abstract terms).      |
+| [`modules/zoteroItems.js`](src/chrome/content/modules/zoteroItems.js) | Seed extraction, library-existence check, item creation per Zotero type. |
+| [`modules/util.js`](src/chrome/content/modules/util.js)               | Small helpers (`chunk`, `normalizeText`, `formatScore`).                 |
 
 ---
 

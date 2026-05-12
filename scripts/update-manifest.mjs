@@ -45,8 +45,8 @@ function parseArgs(argv) {
 }
 
 function semverCmp(a, b) {
-  const pa = a.split(".").map(n => parseInt(n, 10));
-  const pb = b.split(".").map(n => parseInt(n, 10));
+  const pa = a.split(".").map((n) => parseInt(n, 10));
+  const pb = b.split(".").map((n) => parseInt(n, 10));
   for (let i = 0; i < 3; i++) {
     const da = pa[i] || 0;
     const db = pb[i] || 0;
@@ -80,12 +80,12 @@ function main() {
   const args = parseArgs(process.argv);
 
   const version = String(args.version || "").trim();
-  const xpiURL  = String(args["xpi-url"] || "").trim();
-  const sha     = String(args.sha256 || "").trim();
+  const xpiURL = String(args["xpi-url"] || "").trim();
+  const sha = String(args.sha256 || "").trim();
 
-  if (!isSemver(version))     throw new Error(`Invalid --version: ${version}`);
-  if (!isHttpsUrl(xpiURL))    throw new Error(`Invalid --xpi-url (must be https): ${xpiURL}`);
-  if (!isSha256(sha))         throw new Error(`Invalid --sha256: must be 64 hex chars`);
+  if (!isSemver(version)) throw new Error(`Invalid --version: ${version}`);
+  if (!isHttpsUrl(xpiURL)) throw new Error(`Invalid --xpi-url (must be https): ${xpiURL}`);
+  if (!isSha256(sha)) throw new Error(`Invalid --sha256: must be 64 hex chars`);
 
   const manifestPath = path.join(repoRoot, "src", "manifest.json");
   const manifest = loadJSON(manifestPath);
@@ -126,18 +126,16 @@ function main() {
   };
 
   // Replace any existing entry for this exact version, then sort ascending.
-  const merged = existing.filter(u => u.version !== version).concat(newUpdate);
+  const merged = existing.filter((u) => u.version !== version).concat(newUpdate);
   merged.sort((a, b) => semverCmp(a.version, b.version));
 
   updatesDoc.addons[z.id] = { updates: merged };
 
-  fs.writeFileSync(
-    updatesPath,
-    JSON.stringify(updatesDoc, null, 2) + "\n",
-    "utf8"
-  );
+  fs.writeFileSync(updatesPath, JSON.stringify(updatesDoc, null, 2) + "\n", "utf8");
 
-  console.log(`updates.json: wrote ${merged.length} entr${merged.length === 1 ? "y" : "ies"} for ${z.id}; latest=${merged[merged.length - 1].version}`);
+  console.log(
+    `updates.json: wrote ${merged.length} entr${merged.length === 1 ? "y" : "ies"} for ${z.id}; latest=${merged[merged.length - 1].version}`
+  );
 }
 
 try {

@@ -40,7 +40,7 @@ var SnowballLog = {
     }
 
     // Bearer tokens in any logged Authorization header.
-    s = s.replace(/(authorization:\s*bearer\s+)[A-Za-z0-9._\-]+/gi, "$1<redacted>");
+    s = s.replace(/(authorization:\s*bearer\s+)[A-Za-z0-9._-]+/gi, "$1<redacted>");
 
     return s;
   },
@@ -78,17 +78,28 @@ var SnowballLog = {
         Zotero.debug(line);
         return;
       }
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
     try {
-      // eslint-disable-next-line no-console
       console?.[level === "error" ? "error" : level === "warn" ? "warn" : "log"]?.(line);
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
   },
 
-  debug(message, context) { this._emit("debug", message, context); },
-  info(message, context)  { this._emit("info",  message, context); },
-  warn(message, context)  { this._emit("warn",  message, context); },
-  error(message, context) { this._emit("error", message, context); },
+  debug(message, context) {
+    this._emit("debug", message, context);
+  },
+  info(message, context) {
+    this._emit("info", message, context);
+  },
+  warn(message, context) {
+    this._emit("warn", message, context);
+  },
+  error(message, context) {
+    this._emit("error", message, context);
+  },
 
   /**
    * Format an Error for logging with stack but stripped of any secrets that

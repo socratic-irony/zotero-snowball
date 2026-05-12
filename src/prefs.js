@@ -26,20 +26,20 @@ pref("extensions.snowballSources.uiState", "");
 // Column visibility in the review dialog. Title is always shown so a
 // candidate can't appear as a row of empty cells. Each pref toggles a
 // single column.
-pref("extensions.snowballSources.columns.score",     true);
+pref("extensions.snowballSources.columns.score", true);
 pref("extensions.snowballSources.columns.direction", true);
-pref("extensions.snowballSources.columns.status",    true);
-pref("extensions.snowballSources.columns.year",      true);
-pref("extensions.snowballSources.columns.authors",   true);
-pref("extensions.snowballSources.columns.venue",     true);
-pref("extensions.snowballSources.columns.citedBy",   true);
+pref("extensions.snowballSources.columns.status", true);
+pref("extensions.snowballSources.columns.year", true);
+pref("extensions.snowballSources.columns.authors", true);
+pref("extensions.snowballSources.columns.venue", true);
+pref("extensions.snowballSources.columns.citedBy", true);
 
 // Score weight customization. Defaults match SnowballRanking.WEIGHTS.
 // Range 0–2.0 with 0.05 step in the prefs UI.
-pref("extensions.snowballSources.weights.text",          1.00);
-pref("extensions.snowballSources.weights.bibCoupling",   0.20);
-pref("extensions.snowballSources.weights.coCitation",    0.15);
-pref("extensions.snowballSources.weights.authorOverlap", 0.10);
-pref("extensions.snowballSources.weights.titleTrigram",  0.08);
-pref("extensions.snowballSources.weights.citation",      0.10);
-pref("extensions.snowballSources.weights.embedding",     0.40);
+pref("extensions.snowballSources.weights.text", 1.0);
+pref("extensions.snowballSources.weights.bibCoupling", 0.2);
+pref("extensions.snowballSources.weights.coCitation", 0.15);
+pref("extensions.snowballSources.weights.authorOverlap", 0.1);
+pref("extensions.snowballSources.weights.titleTrigram", 0.08);
+pref("extensions.snowballSources.weights.citation", 0.1);
+pref("extensions.snowballSources.weights.embedding", 0.4);

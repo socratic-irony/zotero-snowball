@@ -18,6 +18,9 @@
 var SemanticScholarProvider = class {
   static MAX_BATCH = 500;
 
+  /**
+   * @param {{ apiKey?: string, timeoutMs?: number, maxRetries?: number }} [config]
+   */
   constructor({ apiKey = "", timeoutMs = 60000, maxRetries } = {}) {
     this.baseURL = "https://api.semanticscholar.org";
     this.apiKey = String(apiKey || "").trim();
@@ -46,7 +49,9 @@ var SemanticScholarProvider = class {
     const seen = new Set();
     const uniq = [];
     for (const d of dois) {
-      const v = String(d || "").trim().toLowerCase();
+      const v = String(d || "")
+        .trim()
+        .toLowerCase();
       if (!v) continue;
       // Strip any leading https://doi.org/ that might have slipped through.
       const norm = v.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").replace(/^doi:/i, "");
@@ -64,7 +69,7 @@ var SemanticScholarProvider = class {
       url.searchParams.set("fields", "embedding");
 
       const reqBody = JSON.stringify({
-        ids: chunk.map(d => `DOI:${d}`)
+        ids: chunk.map((d) => `DOI:${d}`)
       });
 
       let response;
@@ -94,7 +99,9 @@ var SemanticScholarProvider = class {
         if (!Array.isArray(vec) || !vec.length) continue;
         try {
           out.set(chunk[j], Float32Array.from(vec));
-        } catch (_) { /* skip malformed vector */ }
+        } catch (_) {
+          /* skip malformed vector */
+        }
       }
     }
 

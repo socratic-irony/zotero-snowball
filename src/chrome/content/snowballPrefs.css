@@ -6,7 +6,9 @@
  * tokens with `light-dark()` fallbacks. No hardcoded "always light" colors.
  */
 
-:root { color-scheme: light dark; }
+:root {
+  color-scheme: light dark;
+}
 
 .snowball-prefs {
   display: flex;
@@ -27,8 +29,7 @@
   flex-direction: column;
   gap: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--fill-quinary,
-    color-mix(in srgb, currentColor 12%, transparent));
+  border-bottom: 1px solid var(--fill-quinary, color-mix(in srgb, currentColor 12%, transparent));
 }
 
 .snowball-prefs section:last-of-type {
@@ -74,8 +75,7 @@
   min-width: 0;
   padding: 5px 9px;
   font-size: 12.5px;
-  border: 1px solid var(--fill-quarternary,
-    color-mix(in srgb, currentColor 22%, transparent));
+  border: 1px solid var(--fill-quarternary, color-mix(in srgb, currentColor 22%, transparent));
   border-radius: 5px;
   /* Bypass --material-control on purpose; Zotero's value is light in
      both modes. See snowballDialog.css for the rationale. */
@@ -87,8 +87,8 @@
 .snowball-prefs input[type="number"]:focus {
   outline: none;
   border-color: var(--color-accent, light-dark(#0a84ff, #58a6ff));
-  box-shadow: 0 0 0 2px var(--color-accent-light,
-    light-dark(rgba(10, 132, 255, 0.25), rgba(10, 132, 255, 0.45)));
+  box-shadow: 0 0 0 2px
+    var(--color-accent-light, light-dark(rgba(10, 132, 255, 0.25), rgba(10, 132, 255, 0.45)));
 }
 
 .snowball-prefs-footer {
@@ -97,8 +97,7 @@
   gap: 10px;
   padding-top: 10px;
   margin-top: auto;
-  border-top: 1px solid var(--fill-quinary,
-    color-mix(in srgb, currentColor 12%, transparent));
+  border-top: 1px solid var(--fill-quinary, color-mix(in srgb, currentColor 12%, transparent));
 }
 
 .snowball-prefs-footer button.primary {
@@ -118,12 +117,13 @@
   padding: 8px 10px;
   border-radius: 6px;
   font-size: 12px;
-  background: light-dark(rgba(217, 119, 6, 0.10),
-                          rgba(251, 191, 36, 0.16));
+  background: light-dark(rgba(217, 119, 6, 0.1), rgba(251, 191, 36, 0.16));
   border: 1px solid light-dark(#d97706, #fbbf24);
   color: light-dark(#92400e, #fcd34d);
 }
-.snowball-prefs-confirm[hidden] { display: none; }
+.snowball-prefs-confirm[hidden] {
+  display: none;
+}
 
 .snowball-prefs-confirm-message {
   flex: 1;
@@ -206,7 +206,7 @@
 
   .snowball-prefs-footer button:active,
   .snowball-prefs button:active {
-    background: rgba(255, 255, 255, 0.20);
+    background: rgba(255, 255, 255, 0.2);
   }
 
   .snowball-prefs-footer button.primary {

@@ -28,7 +28,9 @@ var SnowballUtil = {
    * Returns "" for missing/garbage input.
    */
   shortOpenAlexID(id) {
-    return String(id || "").replace(/^https?:\/\/openalex\.org\//i, "").trim();
+    return String(id || "")
+      .replace(/^https?:\/\/openalex\.org\//i, "")
+      .trim();
   },
 
   /**
@@ -75,12 +77,15 @@ var SnowballUtil = {
     if (!a || !b) return 0;
     const len = Math.min(a.length || 0, b.length || 0);
     if (!len) return 0;
-    let dot = 0, na = 0, nb = 0;
+    let dot = 0,
+      na = 0,
+      nb = 0;
     for (let i = 0; i < len; i++) {
-      const x = a[i], y = b[i];
+      const x = a[i],
+        y = b[i];
       dot += x * y;
-      na  += x * x;
-      nb  += y * y;
+      na += x * x;
+      nb += y * y;
     }
     if (!na || !nb) return 0;
     return dot / (Math.sqrt(na) * Math.sqrt(nb));

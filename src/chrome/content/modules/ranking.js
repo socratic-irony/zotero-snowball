@@ -25,13 +25,13 @@
  */
 var SnowballRanking = {
   WEIGHTS: {
-    text:          1.00,
-    bibCoupling:   0.20,
-    coCitation:    0.15,
-    authorOverlap: 0.10,
-    titleTrigram:  0.08,
-    citation:      0.10,
-    embedding:     0.40
+    text: 1.0,
+    bibCoupling: 0.2,
+    coCitation: 0.15,
+    authorOverlap: 0.1,
+    titleTrigram: 0.08,
+    citation: 0.1,
+    embedding: 0.4
   },
 
   // Saturate at this many shared refs per candidate. Anything beyond
@@ -88,7 +88,7 @@ var SnowballRanking = {
 
     // Per-seed trigram sets. We score against the MAX over seeds so a
     // candidate with a near-duplicate title to ANY one seed ranks high.
-    const titleTrigrams = records.map(s => SnowballUtil.trigrams(s?.title || ""));
+    const titleTrigrams = records.map((s) => SnowballUtil.trigrams(s?.title || ""));
 
     return {
       termVector,
@@ -118,7 +118,7 @@ var SnowballRanking = {
 
   buildSeedVector(seedRecords) {
     const seedText = (Array.isArray(seedRecords) ? seedRecords : [])
-      .map(seed => `${seed?.title || ""} ${seed?.abstract || ""}`)
+      .map((seed) => `${seed?.title || ""} ${seed?.abstract || ""}`)
       .join(" ");
     return this.termVector(seedText);
   },
@@ -160,9 +160,7 @@ var SnowballRanking = {
       const id = SnowballUtil.shortOpenAlexID(candidate.openAlexID);
       coCitationRaw = ctx.refsMultiplicity.get(id) || 0;
     }
-    const coCitation = ctx.seedCount > 0
-      ? Math.min(1, coCitationRaw / ctx.seedCount)
-      : 0;
+    const coCitation = ctx.seedCount > 0 ? Math.min(1, coCitationRaw / ctx.seedCount) : 0;
 
     // Author overlap: fraction of candidate authors who appear in any seed.
     let authorOverlap = 0;
@@ -194,22 +192,22 @@ var SnowballRanking = {
     // Optional embedding similarity (set by S2 enrichment, otherwise 0).
     const embed = Math.max(0, Math.min(1, Number(candidate._embeddingSimilarity) || 0));
 
-    const abstractPenalty  = candidate.abstract ? 0 : -0.05;
+    const abstractPenalty = candidate.abstract ? 0 : -0.05;
     const duplicatePenalty = candidate.alreadyInLibrary ? -0.35 : 0;
-    const directionBoost   = candidate.direction === "both" ? 0.1 : 0;
+    const directionBoost = candidate.direction === "both" ? 0.1 : 0;
 
     // Honor per-context weight overrides if the caller supplied them
     // (the dialog passes weights from prefs); otherwise use the tuned
     // module defaults.
-    const W = (ctx && ctx.weights) ? ctx.weights : this.WEIGHTS;
+    const W = ctx && ctx.weights ? ctx.weights : this.WEIGHTS;
     const composite =
-      W.text          * text +
-      W.bibCoupling   * bibCoupling +
-      W.coCitation    * coCitation +
+      W.text * text +
+      W.bibCoupling * bibCoupling +
+      W.coCitation * coCitation +
       W.authorOverlap * authorOverlap +
-      W.titleTrigram  * titleTrigram +
-      W.citation      * citation +
-      W.embedding     * embed +
+      W.titleTrigram * titleTrigram +
+      W.citation * citation +
+      W.embedding * embed +
       abstractPenalty +
       duplicatePenalty +
       directionBoost;
@@ -219,9 +217,18 @@ var SnowballRanking = {
     // Persisted breakdown for a future "explain why this scored high"
     // tooltip and for tuning weights.
     candidate._scoreBreakdown = {
-      text, bibCoupling, bibCouplingRaw, coCitation, coCitationRaw,
-      authorOverlap, titleTrigram, citation, embedding: embed,
-      abstractPenalty, duplicatePenalty, directionBoost
+      text,
+      bibCoupling,
+      bibCouplingRaw,
+      coCitation,
+      coCitationRaw,
+      authorOverlap,
+      titleTrigram,
+      citation,
+      embedding: embed,
+      abstractPenalty,
+      duplicatePenalty,
+      directionBoost
     };
 
     return candidate;
@@ -239,20 +246,47 @@ var SnowballRanking = {
 
   tokenize(text) {
     const stop = new Set([
-      "the", "and", "for", "with", "that", "this", "from", "are", "was",
-      "were", "have", "has", "had", "not", "but", "can", "may", "using",
-      "use", "used", "into", "their", "there", "these", "those", "than",
-      "study", "paper", "article"
+      "the",
+      "and",
+      "for",
+      "with",
+      "that",
+      "this",
+      "from",
+      "are",
+      "was",
+      "were",
+      "have",
+      "has",
+      "had",
+      "not",
+      "but",
+      "can",
+      "may",
+      "using",
+      "use",
+      "used",
+      "into",
+      "their",
+      "there",
+      "these",
+      "those",
+      "than",
+      "study",
+      "paper",
+      "article"
     ]);
     return String(text)
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, " ")
       .split(/\s+/)
-      .filter(token => token.length > 2 && !stop.has(token));
+      .filter((token) => token.length > 2 && !stop.has(token));
   },
 
   cosine(a, b) {
-    let dot = 0, normA = 0, normB = 0;
+    let dot = 0,
+      normA = 0,
+      normB = 0;
     for (const value of a.values()) normA += value * value;
     for (const value of b.values()) normB += value * value;
     for (const [key, value] of a.entries()) dot += value * (b.get(key) || 0);

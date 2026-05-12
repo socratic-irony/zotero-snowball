@@ -7,12 +7,8 @@ const { XMLParser } = require("./xml-test-utils");
 const ROOT = path.resolve(__dirname, "..");
 
 test("manifest includes Zotero-required add-on compatibility metadata", () => {
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(ROOT, "src", "manifest.json"), "utf8")
-  );
-  const packageJSON = JSON.parse(
-    fs.readFileSync(path.join(ROOT, "package.json"), "utf8")
-  );
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "src", "manifest.json"), "utf8"));
+  const packageJSON = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 
   const zotero = manifest.applications?.zotero;
 
@@ -42,7 +38,10 @@ test("review dialog declares Zotero-compatible window layout and stylesheets", (
   assert.equal(root.attributes["data-l10n-id"], undefined);
   assert.equal(root.attributes["data-l10n-attrs"], undefined);
   assert.match(source, /<\?xml-stylesheet href="chrome:\/\/global\/skin\/"/);
-  assert.match(source, /<\?xml-stylesheet href="chrome:\/\/snowball-sources\/content\/snowballDialog\.css"/);
+  assert.match(
+    source,
+    /<\?xml-stylesheet href="chrome:\/\/snowball-sources\/content\/snowballDialog\.css"/
+  );
 });
 
 test("review dialog asset references resolve inside the XPI source tree", () => {
@@ -53,27 +52,30 @@ test("review dialog asset references resolve inside the XPI source tree", () => 
   const references = [
     ...source.matchAll(/<script\s+src="([^"]+)"/g),
     ...source.matchAll(/<\?xml-stylesheet\s+href="([^"]+)"/g)
-  ].map(match => match[1]);
+  ].map((match) => match[1]);
 
   // Local-content references must use the registered chrome:// URL so that
   // they resolve identically whether the document is loaded via chrome://
   // or rootURI://.
-  const localRefs = references.filter(href =>
+  const localRefs = references.filter((href) =>
     href.startsWith("chrome://snowball-sources/content/")
   );
 
-  assert.deepEqual(localRefs.sort(), [
-    "chrome://snowball-sources/content/snowballDialog.css",
-    "chrome://snowball-sources/content/snowballDialog.js",
-    "chrome://snowball-sources/content/modules/log.js",
-    "chrome://snowball-sources/content/modules/errors.js",
-    "chrome://snowball-sources/content/modules/http.js",
-    "chrome://snowball-sources/content/modules/util.js",
-    "chrome://snowball-sources/content/modules/ranking.js",
-    "chrome://snowball-sources/content/modules/openalex.js",
-    "chrome://snowball-sources/content/modules/semanticscholar.js",
-    "chrome://snowball-sources/content/modules/zoteroItems.js"
-  ].sort());
+  assert.deepEqual(
+    localRefs.sort(),
+    [
+      "chrome://snowball-sources/content/snowballDialog.css",
+      "chrome://snowball-sources/content/snowballDialog.js",
+      "chrome://snowball-sources/content/modules/log.js",
+      "chrome://snowball-sources/content/modules/errors.js",
+      "chrome://snowball-sources/content/modules/http.js",
+      "chrome://snowball-sources/content/modules/util.js",
+      "chrome://snowball-sources/content/modules/ranking.js",
+      "chrome://snowball-sources/content/modules/openalex.js",
+      "chrome://snowball-sources/content/modules/semanticscholar.js",
+      "chrome://snowball-sources/content/modules/zoteroItems.js"
+    ].sort()
+  );
 
   for (const href of localRefs) {
     const localPath = href.replace("chrome://snowball-sources/content/", "");
@@ -92,8 +94,9 @@ test("review dialog chrome document does not reference assets outside registered
   const references = [
     ...source.matchAll(/<script\s+src="([^"]+)"/g),
     ...source.matchAll(/<\?xml-stylesheet\s+href="([^"]+)"/g)
-  ].map(match => match[1])
-    .filter(href => !href.startsWith("chrome://"));
+  ]
+    .map((match) => match[1])
+    .filter((href) => !href.startsWith("chrome://"));
 
   for (const href of references) {
     assert.doesNotMatch(href, /\.\.\//, `Parent traversal is not safe in chrome content: ${href}`);
@@ -101,10 +104,7 @@ test("review dialog chrome document does not reference assets outside registered
 });
 
 test("review dialog script avoids HTML string injection in the XML chrome document", () => {
-  const source = fs.readFileSync(
-    path.join(ROOT, "src/chrome/content/snowballDialog.js"),
-    "utf8"
-  );
+  const source = fs.readFileSync(path.join(ROOT, "src/chrome/content/snowballDialog.js"), "utf8");
 
   assert.doesNotMatch(source, /\.innerHTML\s*=/);
 });
@@ -113,10 +113,7 @@ test("dialog and prefs scripts do not use window.alert / confirm / prompt", () =
   // These render with the ugly "[JavaScript Application]" window header.
   // The dialog and prefs use the in-dialog toast and inline confirm panel
   // instead. Keep this guard so we don't regress.
-  const targets = [
-    "src/chrome/content/snowballDialog.js",
-    "src/chrome/content/snowballPrefs.js"
-  ];
+  const targets = ["src/chrome/content/snowballDialog.js", "src/chrome/content/snowballPrefs.js"];
   for (const rel of targets) {
     const text = fs.readFileSync(path.join(ROOT, rel), "utf8");
     for (const fn of ["window.alert", "window.confirm", "window.prompt"]) {

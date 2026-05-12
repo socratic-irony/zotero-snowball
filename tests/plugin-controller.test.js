@@ -91,11 +91,10 @@ test("startup registers menus and loads localization into already-open main wind
 
   await plugin.startup();
 
-  assert.deepEqual(registered.map(menu => menu.target), [
-    "main/library/item",
-    "main/library/collection",
-    "main/menubar/tools"
-  ]);
+  assert.deepEqual(
+    registered.map((menu) => menu.target),
+    ["main/library/item", "main/library/collection", "main/menubar/tools"]
+  );
   assert.deepEqual(win.inserted, ["snowball-sources.ftl"]);
 });
 
@@ -109,21 +108,19 @@ test("all registered menu l10n IDs exist in the Fluent file", async () => {
 
   await plugin.startup();
 
-  const ftl = fs.readFileSync(
-    path.join(ROOT, "src/locale/en-US/snowball-sources.ftl"),
-    "utf8"
-  );
-  const ftlIDs = new Set(
-    Array.from(ftl.matchAll(/^([a-z0-9-]+)\s*=/gm), match => match[1])
-  );
-  const menuIDs = registered.flatMap(menu => menu.menus.map(item => item.l10nID));
+  const ftl = fs.readFileSync(path.join(ROOT, "src/locale/en-US/snowball-sources.ftl"), "utf8");
+  const ftlIDs = new Set(Array.from(ftl.matchAll(/^([a-z0-9-]+)\s*=/gm), (match) => match[1]));
+  const menuIDs = registered.flatMap((menu) => menu.menus.map((item) => item.l10nID));
 
-  assert.deepEqual(menuIDs.sort(), [
-    "snowball-sources-menu-selected",
-    "snowball-sources-menu-collection",
-    "snowball-sources-menu-tools",
-    "snowball-sources-menu-prefs"
-  ].sort());
+  assert.deepEqual(
+    menuIDs.sort(),
+    [
+      "snowball-sources-menu-selected",
+      "snowball-sources-menu-collection",
+      "snowball-sources-menu-tools",
+      "snowball-sources-menu-prefs"
+    ].sort()
+  );
 
   for (const id of menuIDs) {
     assert.ok(ftlIDs.has(id), `Missing Fluent id: ${id}`);
@@ -147,11 +144,14 @@ test("shutdown unregisters menus and removes localization from initialized windo
   await plugin.startup();
   plugin.shutdown();
 
-  assert.deepEqual(unregistered.sort(), [
-    "snowball-sources-item-menu",
-    "snowball-sources-collection-menu",
-    "snowball-sources-tools-menu"
-  ].sort());
+  assert.deepEqual(
+    unregistered.sort(),
+    [
+      "snowball-sources-item-menu",
+      "snowball-sources-collection-menu",
+      "snowball-sources-tools-menu"
+    ].sort()
+  );
   assert.deepEqual(win.removed, ['[href="snowball-sources.ftl"]']);
 });
 
@@ -170,10 +170,7 @@ test("review dialog opens as registered chrome content with explicit dimensions"
   });
 
   assert.equal(openedDialogs.length, 1);
-  assert.equal(
-    openedDialogs[0][0],
-    "chrome://snowball-sources/content/snowballDialog.xhtml"
-  );
+  assert.equal(openedDialogs[0][0], "chrome://snowball-sources/content/snowballDialog.xhtml");
   assert.equal(openedDialogs[0][1], "_blank");
   assert.match(openedDialogs[0][2], /dialog=no/);
   assert.match(openedDialogs[0][2], /width=\d+/);
