@@ -58,11 +58,9 @@ function loadBootstrap() {
     }
   });
 
-  vm.runInContext(
-    fs.readFileSync(path.join(ROOT, "src/bootstrap.js"), "utf8"),
-    context,
-    { filename: "bootstrap.js" }
-  );
+  vm.runInContext(fs.readFileSync(path.join(ROOT, "src/bootstrap.js"), "utf8"), context, {
+    filename: "bootstrap.js"
+  });
 
   return { context, loadedScripts, registeredChrome, destructed };
 }

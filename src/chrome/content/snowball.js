@@ -27,7 +27,7 @@ var SnowballSourcesPlugin = class {
             l10nID: "snowball-sources-menu-selected",
             onShowing: (event, context) => {
               context.setVisible(
-                !!context.items?.some(item => item.isRegularItem && item.isRegularItem())
+                !!context.items?.some((item) => item.isRegularItem && item.isRegularItem())
               );
             },
             onCommand: async (event, context) => {
@@ -156,12 +156,14 @@ var SnowballSourcesPlugin = class {
       button.setAttribute("tooltiptext", "Snowball Sources (⌘⇧S)");
       button.setAttribute("tabindex", "-1");
       button.addEventListener("command", () => {
-        this.runForCurrentSelection().catch(error => {
+        this.runForCurrentSelection().catch((error) => {
           try {
             if (typeof SnowballLog !== "undefined") {
               SnowballLog.error("toolbar action failed", { error: SnowballLog.formatError(error) });
             }
-          } catch (_) { /* ignore */ }
+          } catch (_) {
+            /* ignore */
+          }
         });
       });
 
@@ -187,9 +189,13 @@ var SnowballSourcesPlugin = class {
     } catch (error) {
       try {
         if (typeof SnowballLog !== "undefined") {
-          SnowballLog.warn("toolbar button install failed", { error: SnowballLog.formatError(error) });
+          SnowballLog.warn("toolbar button install failed", {
+            error: SnowballLog.formatError(error)
+          });
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
     }
   }
 
@@ -219,21 +225,29 @@ var SnowballSourcesPlugin = class {
       key.setAttribute("modifiers", "accel,shift");
       // XUL <key> dispatches `command` events when the shortcut fires.
       key.addEventListener("command", () => {
-        this.runForCurrentSelection().catch(error => {
+        this.runForCurrentSelection().catch((error) => {
           try {
             if (typeof SnowballLog !== "undefined") {
-              SnowballLog.error("keyboard action failed", { error: SnowballLog.formatError(error) });
+              SnowballLog.error("keyboard action failed", {
+                error: SnowballLog.formatError(error)
+              });
             }
-          } catch (_) { /* ignore */ }
+          } catch (_) {
+            /* ignore */
+          }
         });
       });
       keyset.appendChild(key);
     } catch (error) {
       try {
         if (typeof SnowballLog !== "undefined") {
-          SnowballLog.warn("keyboard shortcut install failed", { error: SnowballLog.formatError(error) });
+          SnowballLog.warn("keyboard shortcut install failed", {
+            error: SnowballLog.formatError(error)
+          });
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
     }
   }
 
@@ -248,10 +262,18 @@ var SnowballSourcesPlugin = class {
     window.document.querySelector('[href="snowball-sources.ftl"]')?.remove();
     // Remove the toolbar button and keyboard shortcut we injected, plus
     // the keyset we may have created if Zotero didn't have one.
-    try { window.document.getElementById("snowball-toolbar-button")?.remove(); } catch (_) {}
-    try { window.document.getElementById("snowball-toolbar-style")?.remove(); } catch (_) {}
-    try { window.document.getElementById("snowball-key")?.remove(); } catch (_) {}
-    try { window.document.getElementById("snowball-keyset")?.remove(); } catch (_) {}
+    try {
+      window.document.getElementById("snowball-toolbar-button")?.remove();
+    } catch (_) {}
+    try {
+      window.document.getElementById("snowball-toolbar-style")?.remove();
+    } catch (_) {}
+    try {
+      window.document.getElementById("snowball-key")?.remove();
+    } catch (_) {}
+    try {
+      window.document.getElementById("snowball-keyset")?.remove();
+    } catch (_) {}
   }
 
   shutdown() {
@@ -272,8 +294,9 @@ var SnowballSourcesPlugin = class {
 
   async runForCurrentSelection() {
     const pane = Zotero.getActiveZoteroPane();
-    const items = (pane.getSelectedItems?.() || [])
-      .filter(item => item.isRegularItem && item.isRegularItem());
+    const items = (pane.getSelectedItems?.() || []).filter(
+      (item) => item.isRegularItem && item.isRegularItem()
+    );
 
     if (items.length) {
       await this.runForItems(items);
@@ -295,14 +318,15 @@ var SnowballSourcesPlugin = class {
       return;
     }
 
-    const items = (collection.getChildItems?.() || [])
-      .filter(item => item.isRegularItem && item.isRegularItem());
+    const items = (collection.getChildItems?.() || []).filter(
+      (item) => item.isRegularItem && item.isRegularItem()
+    );
 
     await this.runForItems(items, collection);
   }
 
   async runForItems(items, explicitCollection = null) {
-    const regularItems = items.filter(item => item.isRegularItem && item.isRegularItem());
+    const regularItems = items.filter((item) => item.isRegularItem && item.isRegularItem());
 
     if (!regularItems.length) {
       this.alert("No regular Zotero items selected.");
@@ -320,20 +344,24 @@ var SnowballSourcesPlugin = class {
         // Semantic Scholar enrichment is opt-in: empty key disables it
         // entirely (no S2 traffic will be initiated by the dialog).
         semanticScholarAPIKey: this.prefStr("semanticScholarAPIKey", ""),
-        maxForwardPerSeed:  this.prefInt("maxForwardPerSeed",  100, 0, 1000),
+        maxForwardPerSeed: this.prefInt("maxForwardPerSeed", 100, 0, 1000),
         maxBackwardPerSeed: this.prefInt("maxBackwardPerSeed", 100, 0, 1000),
         maxCandidatesTotal: this.prefInt("maxCandidatesTotal", 500, 1, 10000),
-        timeoutMs:          this.prefInt("requestTimeoutMs",  30000, 1000, 120000),
-        includeForward:     this.prefBool("includeForward",   true),
-        includeBackward:    this.prefBool("includeBackward",  true)
+        timeoutMs: this.prefInt("requestTimeoutMs", 30000, 1000, 120000),
+        includeForward: this.prefBool("includeForward", true),
+        includeBackward: this.prefBool("includeBackward", true)
       };
       // Custom score weights from prefs (defaults match the module's
       // tuned values). Each weight is clamped to [0, 2] so a malformed
       // pref can't push it negative or astronomically large.
       const weightDefaults = {
-        text: 1.00, bibCoupling: 0.20, coCitation: 0.15,
-        authorOverlap: 0.10, titleTrigram: 0.08, citation: 0.10,
-        embedding: 0.40
+        text: 1.0,
+        bibCoupling: 0.2,
+        coCitation: 0.15,
+        authorOverlap: 0.1,
+        titleTrigram: 0.08,
+        citation: 0.1,
+        embedding: 0.4
       };
       const weights = {};
       for (const [k, def] of Object.entries(weightDefaults)) {
@@ -342,20 +370,22 @@ var SnowballSourcesPlugin = class {
       }
       // Refuse to launch with an entirely empty fetch scope.
       if (!providerConfig.includeForward && !providerConfig.includeBackward) {
-        this.alert("Both forward and backward citations are disabled in preferences. Enable at least one to snowball.");
+        this.alert(
+          "Both forward and backward citations are disabled in preferences. Enable at least one to snowball."
+        );
         return;
       }
 
       // Column-visibility prefs. Title is intentionally absent — it's
       // always shown.
       const columns = {
-        score:     this.prefBool("columns.score",     true),
+        score: this.prefBool("columns.score", true),
         direction: this.prefBool("columns.direction", true),
-        status:    this.prefBool("columns.status",    true),
-        year:      this.prefBool("columns.year",      true),
-        authors:   this.prefBool("columns.authors",   true),
-        venue:     this.prefBool("columns.venue",     true),
-        citedBy:   this.prefBool("columns.citedBy",   true)
+        status: this.prefBool("columns.status", true),
+        year: this.prefBool("columns.year", true),
+        authors: this.prefBool("columns.authors", true),
+        venue: this.prefBool("columns.venue", true),
+        citedBy: this.prefBool("columns.citedBy", true)
       };
 
       this.openReviewDialog({
@@ -366,7 +396,7 @@ var SnowballSourcesPlugin = class {
         columns,
         flags: {
           skipAlreadyInLibrary: this.prefBool("skipAlreadyInLibrary", true),
-          minCitedBy:           this.prefInt("minCitedBy", 0, 0, 100000)
+          minCitedBy: this.prefInt("minCitedBy", 0, 0, 100000)
         },
         uiState: this._readUIState()
       });
@@ -377,10 +407,13 @@ var SnowballSourcesPlugin = class {
         } else {
           Zotero.debug(`Snowball Sources: run failed: ${error?.stack || error}`);
         }
-      } catch (_) { /* ignore */ }
-      const friendly = (typeof formatUserError === "function")
-        ? formatUserError(error)
-        : (error?.message || String(error));
+      } catch (_) {
+        /* ignore */
+      }
+      const friendly =
+        typeof formatUserError === "function"
+          ? formatUserError(error)
+          : error?.message || String(error);
       this.alert(`Snowball Sources failed: ${friendly}`);
     }
   }
@@ -399,7 +432,11 @@ var SnowballSourcesPlugin = class {
     // it (Zotero.debug / Zotero.Search / Zotero.Item) can resolve the
     // global without going through window.opener.
     if (dialog) {
-      try { dialog.Zotero = Zotero; } catch (_) { /* ignore */ }
+      try {
+        dialog.Zotero = Zotero;
+      } catch (_) {
+        /* ignore */
+      }
     }
   }
 
@@ -412,7 +449,11 @@ var SnowballSourcesPlugin = class {
       { plugin: this }
     );
     if (dialog) {
-      try { dialog.Zotero = Zotero; } catch (_) { /* ignore */ }
+      try {
+        dialog.Zotero = Zotero;
+      } catch (_) {
+        /* ignore */
+      }
     }
   }
 
@@ -433,7 +474,9 @@ var SnowballSourcesPlugin = class {
         if (typeof SnowballLog !== "undefined") {
           SnowballLog.warn(`pref read failed: ${name}`, { error: SnowballLog.formatError(error) });
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
       return fallback;
     }
   }
@@ -468,7 +511,9 @@ var SnowballSourcesPlugin = class {
         if (typeof SnowballLog !== "undefined") {
           SnowballLog.warn(`pref write failed: ${name}`, { error: SnowballLog.formatError(error) });
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
       throw error;
     }
   }
@@ -484,7 +529,9 @@ var SnowballSourcesPlugin = class {
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object") return parsed;
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
     return null;
   }
 
@@ -502,7 +549,9 @@ var SnowballSourcesPlugin = class {
         if (typeof SnowballLog !== "undefined") {
           SnowballLog.warn("uiState save failed", { error: SnowballLog.formatError(error) });
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
     }
   }
 

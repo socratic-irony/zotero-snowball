@@ -1,8 +1,9 @@
 # Build artifacts
 build/
 
-# Node / package manager noise (we don't have runtime deps but pnpm/yarn/etc.
-# may drop these if a contributor runs them)
+# Node / package manager noise. The plugin itself has zero runtime deps;
+# everything under node_modules/ is dev tooling (eslint, prettier, tsc,
+# lefthook). The XPI build script never reads node_modules/.
 node_modules/
 npm-debug.log
 yarn-error.log

@@ -19,10 +19,7 @@ var SnowballHTTP = {
   // Hosts we are willing to talk to. Anything else throws before we even
   // open a socket. This is the single source of truth — adding a provider
   // means adding its host here.
-  ALLOWED_HOSTS: new Set([
-    "api.openalex.org",
-    "api.semanticscholar.org"
-  ]),
+  ALLOWED_HOSTS: new Set(["api.openalex.org", "api.semanticscholar.org"]),
 
   // Defaults. Callers can override per-request.
   DEFAULT_TIMEOUT_MS: 30_000,
@@ -41,13 +38,14 @@ var SnowballHTTP = {
       throw new SnowballError("BAD_URL", "Invalid request URL.", { cause: error });
     }
     if (u.protocol !== "https:") {
-      throw new SnowballError("BAD_SCHEME",
-        "Refusing non-HTTPS request.", { context: { protocol: u.protocol } });
+      throw new SnowballError("BAD_SCHEME", "Refusing non-HTTPS request.", {
+        context: { protocol: u.protocol }
+      });
     }
     if (!this.ALLOWED_HOSTS.has(u.hostname)) {
-      throw new SnowballError("HOST_NOT_ALLOWED",
-        "Refusing request to non-allowlisted host.",
-        { context: { host: u.hostname } });
+      throw new SnowballError("HOST_NOT_ALLOWED", "Refusing request to non-allowlisted host.", {
+        context: { host: u.hostname }
+      });
     }
     return u;
   },
@@ -61,7 +59,11 @@ var SnowballHTTP = {
     const controller = new AbortController();
     const cleanups = [];
     const trip = (reason) => {
-      try { controller.abort(reason); } catch (_) { /* ignore */ }
+      try {
+        controller.abort(reason);
+      } catch (_) {
+        /* ignore */
+      }
     };
     for (const signal of signals) {
       if (!signal) continue;
@@ -75,7 +77,14 @@ var SnowballHTTP = {
     }
     return {
       signal: controller.signal,
-      dispose: () => { for (const fn of cleanups) try { fn(); } catch (_) { /* ignore */ } }
+      dispose: () => {
+        for (const fn of cleanups)
+          try {
+            fn();
+          } catch (_) {
+            /* ignore */
+          }
+      }
     };
   },
 
@@ -120,11 +129,8 @@ var SnowballHTTP = {
       try {
         response = await fetch(safeURL.toString(), {
           method,
-          headers: Object.assign(
-            { "Accept": "application/json" },
-            headers
-          ),
-          body: (body !== null && body !== undefined) ? body : undefined,
+          headers: Object.assign({ Accept: "application/json" }, headers),
+          body: body !== null && body !== undefined ? body : undefined,
           credentials: "omit",
           redirect: "follow",
           signal: composed.signal
@@ -143,18 +149,22 @@ var SnowballHTTP = {
             await this._delay(this._backoff(attempt), signal);
             continue;
           }
-          throw new SnowballError("HTTP_TIMEOUT",
+          throw new SnowballError(
+            "HTTP_TIMEOUT",
             "The request timed out. Check your network and try again.",
-            { cause: error, context: { url: SnowballLog.scrub(safeURL.toString()), attempt } });
+            { cause: error, context: { url: SnowballLog.scrub(safeURL.toString()), attempt } }
+          );
         }
         // Generic network error: retry.
         if (attempt <= maxRetries) {
           await this._delay(this._backoff(attempt), signal);
           continue;
         }
-        throw new SnowballError("NETWORK_ERROR",
+        throw new SnowballError(
+          "NETWORK_ERROR",
           "Network error. Check your connection and try again.",
-          { cause: error, context: { url: SnowballLog.scrub(safeURL.toString()), attempt } });
+          { cause: error, context: { url: SnowballLog.scrub(safeURL.toString()), attempt } }
+        );
       } finally {
         composed.dispose();
         clearTimeout(timer);
@@ -163,9 +173,10 @@ var SnowballHTTP = {
       // Response received — decide whether to retry on status.
       if (this.RETRYABLE_STATUS.has(response.status) && attempt <= maxRetries) {
         const retryAfter = Number(response.headers.get("retry-after"));
-        const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
-          ? Math.min(retryAfter * 1000, 30_000)
-          : this._backoff(attempt);
+        const delayMs =
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? Math.min(retryAfter * 1000, 30_000)
+            : this._backoff(attempt);
         SnowballLog.warn("HTTP retry", {
           status: response.status,
           attempt,
@@ -178,26 +189,33 @@ var SnowballHTTP = {
 
       if (!response.ok) {
         // Read body but cap to avoid logging megabytes of HTML.
-        let body = "";
+        let bodySnippet = "";
         try {
           const text = await response.text();
-          body = text.slice(0, 500);
-        } catch (_) { /* ignore */ }
-        throw new SnowballError("HTTP_ERROR",
+          bodySnippet = text.slice(0, 500);
+        } catch (_) {
+          /* ignore */
+        }
+        throw new SnowballError(
+          "HTTP_ERROR",
           `Request failed (${response.status}). The provider may be down or rate-limiting.`,
-          { context: {
+          {
+            context: {
               status: response.status,
               url: SnowballLog.scrub(safeURL.toString()),
-              body: SnowballLog.scrub(body)
-            } });
+              body: SnowballLog.scrub(bodySnippet)
+            }
+          }
+        );
       }
 
       try {
         return await response.json();
       } catch (error) {
-        throw new SnowballError("BAD_RESPONSE",
-          "The provider returned an invalid response.",
-          { cause: error, context: { url: SnowballLog.scrub(safeURL.toString()) } });
+        throw new SnowballError("BAD_RESPONSE", "The provider returned an invalid response.", {
+          cause: error,
+          context: { url: SnowballLog.scrub(safeURL.toString()) }
+        });
       }
     }
   },

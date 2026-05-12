@@ -22,8 +22,8 @@ var OpenAlexProvider = class {
     this.apiKey = String(apiKey || "").trim();
     // Clamp every limit so a malformed pref can't cause runaway memory or
     // request storms.
-    this.maxForwardPerSeed  = OpenAlexProvider.clampInt(maxForwardPerSeed,  0, 1000,  100);
-    this.maxBackwardPerSeed = OpenAlexProvider.clampInt(maxBackwardPerSeed, 0, 1000,  100);
+    this.maxForwardPerSeed = OpenAlexProvider.clampInt(maxForwardPerSeed, 0, 1000, 100);
+    this.maxBackwardPerSeed = OpenAlexProvider.clampInt(maxBackwardPerSeed, 0, 1000, 100);
     this.maxCandidatesTotal = OpenAlexProvider.clampInt(maxCandidatesTotal, 1, 10000, 500);
     this.timeoutMs = OpenAlexProvider.clampInt(timeoutMs, 1000, 120000, 30000);
     this.includeForward = !!includeForward;
@@ -74,8 +74,7 @@ var OpenAlexProvider = class {
       }
     }
 
-    return this.deduplicateCandidates(allCandidates)
-      .slice(0, this.maxCandidatesTotal);
+    return this.deduplicateCandidates(allCandidates).slice(0, this.maxCandidatesTotal);
   }
 
   async resolveSeed(seed, signal = null) {
@@ -133,10 +132,12 @@ var OpenAlexProvider = class {
     const ids = (work.referenced_works || []).slice(0, this.maxBackwardPerSeed);
     const works = await this.batchGetWorksByOpenAlexIDs(ids);
 
-    return works.map(candidate => this.normalizeCandidate(candidate, {
-      direction: "backward",
-      seed
-    }));
+    return works.map((candidate) =>
+      this.normalizeCandidate(candidate, {
+        direction: "backward",
+        seed
+      })
+    );
   }
 
   async getForwardCitations(seed, work) {
@@ -155,10 +156,12 @@ var OpenAlexProvider = class {
       const response = await this.fetchJSON(url);
       const results = response.results || [];
 
-      return results.map(candidate => this.normalizeCandidate(candidate, {
-        direction: "forward",
-        seed
-      }));
+      return results.map((candidate) =>
+        this.normalizeCandidate(candidate, {
+          direction: "forward",
+          seed
+        })
+      );
     } catch (error) {
       this.debug(`Forward citation lookup failed for ${openAlexID}: ${error}`);
       return [];
@@ -166,9 +169,7 @@ var OpenAlexProvider = class {
   }
 
   async batchGetWorksByOpenAlexIDs(ids) {
-    const cleanIDs = ids
-      .map(id => this.shortOpenAlexID(id))
-      .filter(Boolean);
+    const cleanIDs = ids.map((id) => this.shortOpenAlexID(id)).filter(Boolean);
 
     const chunks = SnowballUtil.chunk(cleanIDs, 100);
     const all = [];
@@ -220,7 +221,8 @@ var OpenAlexProvider = class {
       // refs to keep candidate objects bounded.
       referencedWorks: this.normalizeReferencedWorks(work.referenced_works, 1000),
       abstract: OpenAlexProvider.clampStr(
-        this.reconstructAbstract(work.abstract_inverted_index), 8000
+        this.reconstructAbstract(work.abstract_inverted_index),
+        8000
       ),
       authors: this.extractAuthors(Array.isArray(work.authorships) ? work.authorships : []),
       direction,
@@ -292,7 +294,7 @@ var OpenAlexProvider = class {
   }
 
   extractAuthors(authorships) {
-    return authorships.map(authorship => {
+    return authorships.map((authorship) => {
       const display = authorship.author?.display_name || "";
       const parts = display.trim().split(/\s+/).filter(Boolean);
 
@@ -324,8 +326,7 @@ var OpenAlexProvider = class {
       throw new DOMException("aborted", "AbortError");
     }
     if (typeof SnowballHTTP === "undefined") {
-      throw new SnowballError("MODULE_LOAD",
-        "HTTP module failed to load.");
+      throw new SnowballError("MODULE_LOAD", "HTTP module failed to load.");
     }
     return SnowballHTTP.fetchJSON(url, {
       signal,
@@ -338,7 +339,11 @@ var OpenAlexProvider = class {
   // so the UI can populate progressively and the user can cancel mid-flight.
 
   async *streamSnowball(seedRecords, signal = null) {
-    yield { type: "status", phase: "resolving", message: `Resolving ${seedRecords.length} seed(s)…` };
+    yield {
+      type: "status",
+      phase: "resolving",
+      message: `Resolving ${seedRecords.length} seed(s)…`
+    };
 
     const resolvedSeeds = [];
     for (let i = 0; i < seedRecords.length; i++) {
@@ -417,7 +422,7 @@ var OpenAlexProvider = class {
 
   async *streamBackward(seed, work, signal) {
     const ids = (work.referenced_works || []).slice(0, this.maxBackwardPerSeed);
-    const cleanIDs = ids.map(id => this.shortOpenAlexID(id)).filter(Boolean);
+    const cleanIDs = ids.map((id) => this.shortOpenAlexID(id)).filter(Boolean);
 
     // 50 per page so the UI sees results sooner than the 100-page batch.
     for (const chunk of SnowballUtil.chunk(cleanIDs, 50)) {
@@ -489,10 +494,7 @@ var OpenAlexProvider = class {
 
       const existing = seen.get(key);
 
-      existing.direction =
-        existing.direction === candidate.direction
-          ? existing.direction
-          : "both";
+      existing.direction = existing.direction === candidate.direction ? existing.direction : "both";
 
       existing.citedByCount = Math.max(existing.citedByCount || 0, candidate.citedByCount || 0);
 

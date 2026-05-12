@@ -1,0 +1,34 @@
+# Lefthook git hooks. Install once per clone with `npx lefthook install`
+# (also runs automatically via the `prepare` npm script).
+#
+# Pre-commit is fast (only staged files); pre-push is the full bar that CI
+# also enforces — keep them in sync with .github/workflows/ci.yml so a green
+# `git push` predicts a green CI run.
+
+pre-commit:
+  parallel: true
+  commands:
+    eslint:
+      glob: "*.{js,mjs,cjs}"
+      run: npx --no-install eslint --max-warnings=0 {staged_files}
+      stage_fixed: true
+    prettier:
+      glob: "*.{js,mjs,cjs,json,md,yml,yaml,css}"
+      exclude: "CHANGELOG.md|updates.json"
+      run: npx --no-install prettier --check {staged_files}
+
+pre-push:
+  parallel: false
+  commands:
+    lint:
+      run: npm run lint
+    typecheck:
+      run: npm run typecheck
+    test:
+      run: npm test
+    validate-manifest:
+      run: npm run validate:manifest
+
+# Bypass with `git commit --no-verify` or `LEFTHOOK=0 git push` when you
+# really need to — but if you find yourself doing that often, the hook is
+# probably wrong; tighten the hook, don't habituate the bypass.

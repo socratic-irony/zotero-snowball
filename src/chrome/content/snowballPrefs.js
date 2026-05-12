@@ -1,3 +1,5 @@
+// @ts-nocheck — see note at top of snowballDialog.js. Tightening tracked
+// in docs/CQ_SECURITY_ROADMAP.md.
 var SnowballPrefs = {
   args: null,
 
@@ -5,50 +7,50 @@ var SnowballPrefs = {
   // Bounds are enforced on save so users can't persist nonsense values
   // (negative limits, runaway maxes, multi-MB API keys).
   schema: {
-    openAlexAPIKey:        { type: "string",  default: "",   maxLength: 256 },
-    semanticScholarAPIKey: { type: "string",  default: "",   maxLength: 256 },
-    includeForward:        { type: "boolean", default: true },
-    includeBackward:       { type: "boolean", default: true },
-    skipAlreadyInLibrary:  { type: "boolean", default: true },
-    downloadPDFs:          { type: "boolean", default: true },
-    maxSeeds:              { type: "number",  default: 50,    min: 1,    max: 500 },
-    maxForwardPerSeed:     { type: "number",  default: 100,   min: 0,    max: 1000 },
-    maxBackwardPerSeed:    { type: "number",  default: 100,   min: 0,    max: 1000 },
-    maxCandidatesTotal:    { type: "number",  default: 500,   min: 1,    max: 10000 },
-    requestTimeoutMs:      { type: "number",  default: 30000, min: 1000, max: 120000 },
-    minCitedBy:            { type: "number",  default: 0,     min: 0,    max: 100000 },
+    openAlexAPIKey: { type: "string", default: "", maxLength: 256 },
+    semanticScholarAPIKey: { type: "string", default: "", maxLength: 256 },
+    includeForward: { type: "boolean", default: true },
+    includeBackward: { type: "boolean", default: true },
+    skipAlreadyInLibrary: { type: "boolean", default: true },
+    downloadPDFs: { type: "boolean", default: true },
+    maxSeeds: { type: "number", default: 50, min: 1, max: 500 },
+    maxForwardPerSeed: { type: "number", default: 100, min: 0, max: 1000 },
+    maxBackwardPerSeed: { type: "number", default: 100, min: 0, max: 1000 },
+    maxCandidatesTotal: { type: "number", default: 500, min: 1, max: 10000 },
+    requestTimeoutMs: { type: "number", default: 30000, min: 1000, max: 120000 },
+    minCitedBy: { type: "number", default: 0, min: 0, max: 100000 },
     // Column visibility. Pref names match the dialog's table column ids.
-    "columns.score":       { type: "boolean", default: true },
-    "columns.direction":   { type: "boolean", default: true },
-    "columns.status":      { type: "boolean", default: true },
-    "columns.year":        { type: "boolean", default: true },
-    "columns.authors":     { type: "boolean", default: true },
-    "columns.venue":       { type: "boolean", default: true },
-    "columns.citedBy":     { type: "boolean", default: true }
+    "columns.score": { type: "boolean", default: true },
+    "columns.direction": { type: "boolean", default: true },
+    "columns.status": { type: "boolean", default: true },
+    "columns.year": { type: "boolean", default: true },
+    "columns.authors": { type: "boolean", default: true },
+    "columns.venue": { type: "boolean", default: true },
+    "columns.citedBy": { type: "boolean", default: true }
   },
 
   // The 7 ranking weights live in their own pref namespace so a
   // `Reset to defaults` button can wipe them in one operation.
   // Default values mirror SnowballRanking.WEIGHTS.
   WEIGHT_DEFAULTS: {
-    text:          1.00,
-    bibCoupling:   0.20,
-    coCitation:    0.15,
-    authorOverlap: 0.10,
-    titleTrigram:  0.08,
-    citation:      0.10,
-    embedding:     0.40
+    text: 1.0,
+    bibCoupling: 0.2,
+    coCitation: 0.15,
+    authorOverlap: 0.1,
+    titleTrigram: 0.08,
+    citation: 0.1,
+    embedding: 0.4
   },
 
   // Display labels for each weight in the prefs UI.
   WEIGHT_LABELS: {
-    text:          "Text similarity (title + abstract)",
-    bibCoupling:   "Bibliographic coupling",
-    coCitation:    "Co-citation across seeds",
+    text: "Text similarity (title + abstract)",
+    bibCoupling: "Bibliographic coupling",
+    coCitation: "Co-citation across seeds",
     authorOverlap: "Author overlap with seeds",
-    titleTrigram:  "Title fuzzy similarity",
-    citation:      "Citation count",
-    embedding:     "Semantic Scholar embedding"
+    titleTrigram: "Title fuzzy similarity",
+    citation: "Citation count",
+    embedding: "Semantic Scholar embedding"
   },
 
   _pendingValues: null,
@@ -59,13 +61,11 @@ var SnowballPrefs = {
       for (const [name, spec] of Object.entries(this.schema)) {
         const input = document.getElementById(`pref-${name.replace(/\./g, "-")}`);
         if (!input) continue;
-        const value = this.args.plugin
-          ? this.args.plugin.pref(name, spec.default)
-          : spec.default;
+        const value = this.args.plugin ? this.args.plugin.pref(name, spec.default) : spec.default;
         if (spec.type === "boolean") {
           input.checked = !!value;
         } else {
-          input.value = (value === null || value === undefined) ? "" : String(value);
+          input.value = value === null || value === undefined ? "" : String(value);
         }
         // Reflect bounds in the input so the OS-level UI helps with
         // invalid input even before save() runs.
@@ -95,7 +95,9 @@ var SnowballPrefs = {
         } else if (typeof Zotero !== "undefined") {
           Zotero.debug?.(`Snowball Prefs init failed: ${error?.stack || error}`);
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
     }
   },
 
@@ -198,7 +200,7 @@ var SnowballPrefs = {
 
   _showAdjustments(errors) {
     const panel = document.getElementById("snowball-prefs-confirm");
-    const list  = document.getElementById("snowball-prefs-confirm-details");
+    const list = document.getElementById("snowball-prefs-confirm-details");
     if (panel && list) {
       list.replaceChildren();
       for (const e of errors) {
@@ -289,12 +291,15 @@ var SnowballPrefs = {
       if (typeof SnowballLog !== "undefined") {
         SnowballLog.error("Prefs save failed", { error: SnowballLog.formatError(error) });
       }
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
     const panel = document.getElementById("snowball-prefs-confirm");
-    const list  = document.getElementById("snowball-prefs-confirm-details");
-    const friendly = (typeof formatUserError === "function")
-      ? formatUserError(error)
-      : (error?.message || String(error));
+    const list = document.getElementById("snowball-prefs-confirm-details");
+    const friendly =
+      typeof formatUserError === "function"
+        ? formatUserError(error)
+        : error?.message || String(error);
     if (panel && list) {
       list.replaceChildren();
       const li = document.createElementNS("http://www.w3.org/1999/xhtml", "li");

@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "isolatedModules": false,
+
+    // Loose by design — we are layering checkJs on top of vibe-coded JS.
+    // The ratchet plan (turn each of these on, fix, commit) lives in
+    // docs/CQ_SECURITY_ROADMAP.md.
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noImplicitThis": false,
+    "alwaysStrict": false,
+
+    // Things we *do* want to catch today.
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "forceConsistentCasingInFileNames": true,
+    "useUnknownInCatchVariables": false,
+
+    "types": ["node"]
+  },
+  "include": ["src/**/*.js", "tests/**/*.js", "scripts/**/*.{js,mjs}", "types/**/*.d.ts"],
+  "exclude": ["node_modules", "build"]
+}

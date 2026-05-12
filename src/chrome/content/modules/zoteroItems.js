@@ -14,7 +14,7 @@ var SnowballZoteroItems = {
   },
 
   extractSeedRecords(items) {
-    return items.map(item => ({
+    return items.map((item) => ({
       zoteroItemID: item.id,
       libraryID: item.libraryID,
       key: item.key,
@@ -170,7 +170,9 @@ var SnowballZoteroItems = {
             } else if (typeof Zotero !== "undefined" && Zotero.debug) {
               Zotero.debug(`Snowball Sources: failed to add candidate: ${error}`);
             }
-          } catch (_) { /* ignore */ }
+          } catch (_) {
+            /* ignore */
+          }
         }
       }
     });
@@ -208,9 +210,13 @@ var SnowballZoteroItems = {
     if (!Zotero?.Attachments?.importFromURL) {
       try {
         if (typeof SnowballLog !== "undefined") {
-          SnowballLog.warn("PDF downloads requested but Zotero.Attachments.importFromURL is unavailable");
+          SnowballLog.warn(
+            "PDF downloads requested but Zotero.Attachments.importFromURL is unavailable"
+          );
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
       return;
     }
     for (const t of targets) {
@@ -221,7 +227,7 @@ var SnowballZoteroItems = {
         url: t.pdfURL,
         title: "Full Text PDF",
         contentType: "application/pdf"
-      }).catch(error => {
+      }).catch((error) => {
         try {
           if (typeof SnowballLog !== "undefined") {
             SnowballLog.warn("PDF download failed", {
@@ -230,7 +236,9 @@ var SnowballZoteroItems = {
               error: SnowballLog.formatError(error)
             });
           }
-        } catch (_) { /* ignore */ }
+        } catch (_) {
+          /* ignore */
+        }
       });
     }
   },
@@ -238,15 +246,15 @@ var SnowballZoteroItems = {
   // Where each item type stores the candidate's "venue" string. Anything not
   // listed here gets the venue stashed in `extra` so the data isn't lost.
   VENUE_FIELD_BY_TYPE: {
-    journalArticle:    "publicationTitle",
-    magazineArticle:   "publicationTitle",
-    newspaperArticle:  "publicationTitle",
-    bookSection:       "bookTitle",
-    conferencePaper:   "proceedingsTitle",
-    preprint:          "repository",
-    book:              "publisher",
-    thesis:            "university",
-    dataset:           "repository"
+    journalArticle: "publicationTitle",
+    magazineArticle: "publicationTitle",
+    newspaperArticle: "publicationTitle",
+    bookSection: "bookTitle",
+    conferencePaper: "proceedingsTitle",
+    preprint: "repository",
+    book: "publisher",
+    thesis: "university",
+    dataset: "repository"
   },
 
   createZoteroItemFromCandidate(candidate, libraryID) {
@@ -268,9 +276,7 @@ var SnowballZoteroItems = {
 
     if (candidate.venue) {
       const venueField = this.VENUE_FIELD_BY_TYPE[itemType];
-      const placed = venueField
-        ? this.safeSetField(item, venueField, candidate.venue)
-        : false;
+      const placed = venueField ? this.safeSetField(item, venueField, candidate.venue) : false;
       if (!placed) {
         // Fallback so the venue isn't silently dropped for unknown types.
         this.appendToExtra(item, `Venue: ${candidate.venue}`);
@@ -278,11 +284,13 @@ var SnowballZoteroItems = {
     }
 
     if (candidate.authors?.length) {
-      item.setCreators(candidate.authors.map(author => ({
-        firstName: author.firstName || "",
-        lastName: author.lastName || author.name || "",
-        creatorType: "author"
-      })));
+      item.setCreators(
+        candidate.authors.map((author) => ({
+          firstName: author.firstName || "",
+          lastName: author.lastName || author.name || "",
+          creatorType: "author"
+        }))
+      );
     }
 
     return item;
@@ -300,7 +308,9 @@ var SnowballZoteroItems = {
         Zotero?.debug?.(
           `Snowball Sources: skipped field "${field}" on type "${item.itemType}": ${error?.message || error}`
         );
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
       return false;
     }
   },
@@ -310,7 +320,9 @@ var SnowballZoteroItems = {
       const current = item.getField("extra") || "";
       const next = current ? `${current}\n${line}` : line;
       item.setField("extra", next);
-    } catch (_) { /* if even extra fails, give up silently */ }
+    } catch (_) {
+      /* if even extra fails, give up silently */
+    }
   },
 
   directionTags(direction) {
@@ -318,11 +330,7 @@ var SnowballZoteroItems = {
       return ["snowball:forward", "snowball:backward"];
     }
 
-    return [
-      direction === "forward"
-        ? "snowball:forward"
-        : "snowball:backward"
-    ];
+    return [direction === "forward" ? "snowball:forward" : "snowball:backward"];
   },
 
   mapItemType(openAlexType) {

@@ -40,69 +40,65 @@
   /* Borders + dividers — `currentColor` mixes adapt to text color which
      itself follows the theme, so dividers are always sufficiently visible
      in both modes. Zotero's tokens take precedence when present. */
-  --snowball-border:        var(--fill-quinary,
-                              color-mix(in srgb, currentColor 12%, transparent));
-  --snowball-border-strong: var(--fill-quarternary,
-                              color-mix(in srgb, currentColor 22%, transparent));
+  --snowball-border: var(--fill-quinary, color-mix(in srgb, currentColor 12%, transparent));
+  --snowball-border-strong: var(
+    --fill-quarternary,
+    color-mix(in srgb, currentColor 22%, transparent)
+  );
 
   /* Row hover / selection. Adaptive fallbacks — light mode uses a touch of
      black, dark mode a touch of white. */
-  --snowball-row-hover:     var(--fill-quinary,
-                              color-mix(in srgb, currentColor 6%, transparent));
-  --snowball-row-selected:  var(--color-accent-light,
-                              light-dark(rgba(10, 132, 255, 0.14),
-                                         rgba(10, 132, 255, 0.28)));
+  --snowball-row-hover: var(--fill-quinary, color-mix(in srgb, currentColor 6%, transparent));
+  --snowball-row-selected: var(
+    --color-accent-light,
+    light-dark(rgba(10, 132, 255, 0.14), rgba(10, 132, 255, 0.28))
+  );
 
-  --snowball-accent:        var(--color-accent, light-dark(#0a84ff, #58a6ff));
+  --snowball-accent: var(--color-accent, light-dark(#0a84ff, #58a6ff));
   --snowball-text-secondary: var(--fill-secondary, light-dark(#555, #aaa));
 
   /* Surfaces — Zotero's --material-* tokens drive these in normal use; the
      light-dark() fallbacks cover any plugin chrome where Zotero hasn't
      defined them. */
-  --snowball-bg:            var(--material-background, light-dark(#fff, #1c1b22));
-  --snowball-bg-toolbar:    var(--material-toolbar,
-                              var(--material-background, light-dark(#f6f6fa, #2a2935)));
-  --snowball-bg-sidepane:   var(--material-sidepane,
-                              var(--material-background-alt,
-                                light-dark(rgba(0,0,0,0.025), rgba(255,255,255,0.04))));
+  --snowball-bg: var(--material-background, light-dark(#fff, #1c1b22));
+  --snowball-bg-toolbar: var(
+    --material-toolbar,
+    var(--material-background, light-dark(#f6f6fa, #2a2935))
+  );
+  --snowball-bg-sidepane: var(
+    --material-sidepane,
+    var(--material-background-alt, light-dark(rgba(0, 0, 0, 0.025), rgba(255, 255, 255, 0.04)))
+  );
   /* Form controls — DELIBERATELY bypass --material-control. Zotero
      defines --color-control as `#fff` in light mode and `#ccc` in dark
      mode (both light); we want our inputs to feel like part of the
      dialog's dark surface in dark mode, not floating light boxes. */
-  --snowball-bg-control:    light-dark(#fff, rgba(255, 255, 255, 0.06));
+  --snowball-bg-control: light-dark(#fff, rgba(255, 255, 255, 0.06));
 
   /* Pill foreground/background — defined here so per-pill rules stay
      readable. Tuned so contrast is good in both modes. */
-  --snowball-pill-backward-bg: light-dark(rgba(99, 102, 241, 0.14),
-                                          rgba(129, 140, 248, 0.22));
+  --snowball-pill-backward-bg: light-dark(rgba(99, 102, 241, 0.14), rgba(129, 140, 248, 0.22));
   --snowball-pill-backward-fg: light-dark(#4338ca, #c7d2fe);
-  --snowball-pill-forward-bg:  light-dark(rgba(16, 185, 129, 0.14),
-                                          rgba(52, 211, 153, 0.22));
-  --snowball-pill-forward-fg:  light-dark(#047857, #6ee7b7);
-  --snowball-pill-both-bg:     light-dark(rgba(217, 119, 6, 0.16),
-                                          rgba(251, 191, 36, 0.22));
-  --snowball-pill-both-fg:     light-dark(#b45309, #fcd34d);
-  --snowball-pill-new-bg:      light-dark(rgba(34, 197, 94, 0.16),
-                                          rgba(74, 222, 128, 0.22));
-  --snowball-pill-new-fg:      light-dark(#15803d, #86efac);
-  --snowball-pill-existing-bg: light-dark(rgba(0, 0, 0, 0.08),
-                                          rgba(255, 255, 255, 0.10));
+  --snowball-pill-forward-bg: light-dark(rgba(16, 185, 129, 0.14), rgba(52, 211, 153, 0.22));
+  --snowball-pill-forward-fg: light-dark(#047857, #6ee7b7);
+  --snowball-pill-both-bg: light-dark(rgba(217, 119, 6, 0.16), rgba(251, 191, 36, 0.22));
+  --snowball-pill-both-fg: light-dark(#b45309, #fcd34d);
+  --snowball-pill-new-bg: light-dark(rgba(34, 197, 94, 0.16), rgba(74, 222, 128, 0.22));
+  --snowball-pill-new-fg: light-dark(#15803d, #86efac);
+  --snowball-pill-existing-bg: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.1));
   --snowball-pill-existing-fg: var(--snowball-text-secondary);
-  --snowball-pill-score-low-bg: light-dark(rgba(0, 0, 0, 0.06),
-                                           rgba(255, 255, 255, 0.08));
+  --snowball-pill-score-low-bg: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.08));
   --snowball-pill-score-low-fg: var(--snowball-text-secondary);
-  --snowball-pill-score-mid-bg: light-dark(rgba(59, 130, 246, 0.14),
-                                           rgba(96, 165, 250, 0.22));
+  --snowball-pill-score-mid-bg: light-dark(rgba(59, 130, 246, 0.14), rgba(96, 165, 250, 0.22));
   --snowball-pill-score-mid-fg: light-dark(#1d4ed8, #93c5fd);
-  --snowball-pill-score-high-bg: light-dark(rgba(16, 185, 129, 0.18),
-                                            rgba(52, 211, 153, 0.26));
+  --snowball-pill-score-high-bg: light-dark(rgba(16, 185, 129, 0.18), rgba(52, 211, 153, 0.26));
   --snowball-pill-score-high-fg: light-dark(#047857, #6ee7b7);
 
   /* Toast surface tints. */
-  --snowball-toast-bg:         light-dark(rgba(255,255,255,0.96), rgba(40, 38, 52, 0.96));
+  --snowball-toast-bg: light-dark(rgba(255, 255, 255, 0.96), rgba(40, 38, 52, 0.96));
   --snowball-toast-success-bd: light-dark(#16a34a, #4ade80);
   --snowball-toast-warning-bd: light-dark(#d97706, #fbbf24);
-  --snowball-toast-error-bd:   light-dark(#dc2626, #f87171);
+  --snowball-toast-error-bd: light-dark(#dc2626, #f87171);
 
   /* Splitter-controlled details column width. */
   --snowball-details-width: 360px;
@@ -151,7 +147,9 @@
   align-items: center;
   margin-right: 2px;
 }
-.snowball-loading[hidden] { display: none; }
+.snowball-loading[hidden] {
+  display: none;
+}
 
 .snowball-spinner {
   display: inline-block;
@@ -164,12 +162,16 @@
 }
 
 @keyframes snowball-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Hide the empty state while still searching with no rows yet (we show
    "Searching…" in the toolbar instead). */
-.snowball-dialog.is-loading #snowball-empty-state { display: none !important; }
+.snowball-dialog.is-loading #snowball-empty-state {
+  display: none !important;
+}
 
 .snowball-filter {
   flex: 0 1 280px;
@@ -297,8 +299,12 @@
   color: var(--snowball-accent);
 }
 
-#snowball-table th.sortable.sort-asc .th-arrow::after  { content: "▲"; }
-#snowball-table th.sortable.sort-desc .th-arrow::after { content: "▼"; }
+#snowball-table th.sortable.sort-asc .th-arrow::after {
+  content: "▲";
+}
+#snowball-table th.sortable.sort-desc .th-arrow::after {
+  content: "▼";
+}
 
 #snowball-table td {
   padding: 8px 10px;
@@ -312,8 +318,7 @@
 }
 
 #snowball-table tbody tr:nth-child(even) {
-  background: var(--material-stripe,
-    var(--color-stripe-shaded, rgba(0, 0, 0, 0.025)));
+  background: var(--material-stripe, var(--color-stripe-shaded, rgba(0, 0, 0, 0.025)));
 }
 
 #snowball-table tbody tr:hover {
@@ -333,20 +338,48 @@
 
 /* Column-specific sizing ----------------------------------------------- */
 
-.col-add        { width: 28px;  text-align: center; }
-.col-score      { width: 56px;  text-align: center; }
-.col-direction  { width: 110px; }
-.col-status     { width: 100px; }
-.col-year       { width: 56px;  text-align: right; font-variant-numeric: tabular-nums; }
-.col-cited      { width: 80px;  text-align: right; font-variant-numeric: tabular-nums;
-                  color: var(--snowball-text-secondary); }
-.col-title      { min-width: 260px; }
-.col-authors    { min-width: 140px; max-width: 240px;
-                  color: var(--snowball-text-secondary); }
-.col-venue      { min-width: 120px; max-width: 200px;
-                  color: var(--snowball-text-secondary); }
+.col-add {
+  width: 28px;
+  text-align: center;
+}
+.col-score {
+  width: 56px;
+  text-align: center;
+}
+.col-direction {
+  width: 110px;
+}
+.col-status {
+  width: 100px;
+}
+.col-year {
+  width: 56px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.col-cited {
+  width: 80px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--snowball-text-secondary);
+}
+.col-title {
+  min-width: 260px;
+}
+.col-authors {
+  min-width: 140px;
+  max-width: 240px;
+  color: var(--snowball-text-secondary);
+}
+.col-venue {
+  min-width: 120px;
+  max-width: 200px;
+  color: var(--snowball-text-secondary);
+}
 
-#snowball-table td.col-add input[type="checkbox"] { margin: 0; }
+#snowball-table td.col-add input[type="checkbox"] {
+  margin: 0;
+}
 
 /* ---- Pills (direction / status / score) -------------------------------- */
 
@@ -363,24 +396,24 @@
 
 .snowball-direction-backward {
   background: var(--snowball-pill-backward-bg);
-  color:      var(--snowball-pill-backward-fg);
+  color: var(--snowball-pill-backward-fg);
 }
 .snowball-direction-forward {
   background: var(--snowball-pill-forward-bg);
-  color:      var(--snowball-pill-forward-fg);
+  color: var(--snowball-pill-forward-fg);
 }
 .snowball-direction-both {
   background: var(--snowball-pill-both-bg);
-  color:      var(--snowball-pill-both-fg);
+  color: var(--snowball-pill-both-fg);
 }
 
 .snowball-status-new {
   background: var(--snowball-pill-new-bg);
-  color:      var(--snowball-pill-new-fg);
+  color: var(--snowball-pill-new-fg);
 }
 .snowball-status-existing {
   background: var(--snowball-pill-existing-bg);
-  color:      var(--snowball-pill-existing-fg);
+  color: var(--snowball-pill-existing-fg);
 }
 
 .snowball-score-pill {
@@ -393,15 +426,15 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
   background: var(--snowball-pill-score-low-bg);
-  color:      var(--snowball-pill-score-low-fg);
+  color: var(--snowball-pill-score-low-fg);
 }
 .snowball-score-pill.snowball-score-high {
   background: var(--snowball-pill-score-high-bg);
-  color:      var(--snowball-pill-score-high-fg);
+  color: var(--snowball-pill-score-high-fg);
 }
 .snowball-score-pill.snowball-score-mid {
   background: var(--snowball-pill-score-mid-bg);
-  color:      var(--snowball-pill-score-mid-fg);
+  color: var(--snowball-pill-score-mid-fg);
 }
 
 /* ---- Splitter ----------------------------------------------------------- */
@@ -420,7 +453,7 @@
   top: 0;
   bottom: 0;
   left: -2px;
-  right: -2px;  /* expand the hit area without changing visual width */
+  right: -2px; /* expand the hit area without changing visual width */
 }
 
 #snowball-splitter:hover,
@@ -500,11 +533,19 @@
   /* Subtle entrance animation. */
   animation: snowball-toast-in 0.18s ease-out;
 }
-.snowball-toast[hidden] { display: none; }
+.snowball-toast[hidden] {
+  display: none;
+}
 
-.snowball-toast.toast-success { border-left-color: var(--snowball-toast-success-bd); }
-.snowball-toast.toast-warning { border-left-color: var(--snowball-toast-warning-bd); }
-.snowball-toast.toast-error   { border-left-color: var(--snowball-toast-error-bd);   }
+.snowball-toast.toast-success {
+  border-left-color: var(--snowball-toast-success-bd);
+}
+.snowball-toast.toast-warning {
+  border-left-color: var(--snowball-toast-warning-bd);
+}
+.snowball-toast.toast-error {
+  border-left-color: var(--snowball-toast-error-bd);
+}
 
 .snowball-toast-icon {
   display: inline-flex;
@@ -518,9 +559,15 @@
   color: white;
   flex: 0 0 auto;
 }
-.toast-success .snowball-toast-icon { background: var(--snowball-toast-success-bd); }
-.toast-warning .snowball-toast-icon { background: var(--snowball-toast-warning-bd); }
-.toast-error   .snowball-toast-icon { background: var(--snowball-toast-error-bd);   }
+.toast-success .snowball-toast-icon {
+  background: var(--snowball-toast-success-bd);
+}
+.toast-warning .snowball-toast-icon {
+  background: var(--snowball-toast-warning-bd);
+}
+.toast-error .snowball-toast-icon {
+  background: var(--snowball-toast-error-bd);
+}
 
 .snowball-toast-message {
   flex: 1;
@@ -540,7 +587,9 @@
 .snowball-toast-action:hover {
   background: color-mix(in srgb, currentColor 8%, transparent);
 }
-.snowball-toast-action[hidden] { display: none; }
+.snowball-toast-action[hidden] {
+  display: none;
+}
 
 .snowball-toast-dismiss {
   background: transparent;
@@ -557,8 +606,14 @@
 }
 
 @keyframes snowball-toast-in {
-  from { opacity: 0; transform: translateY(-3px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ============================================================
@@ -575,7 +630,9 @@
   z-index: 50;
   /* Keep the overlay scoped to the .snowball-dialog viewport. */
 }
-.snowball-overlay[hidden] { display: none; }
+.snowball-overlay[hidden] {
+  display: none;
+}
 
 .snowball-overlay-card {
   width: min(560px, 90%);
@@ -614,7 +671,9 @@
   color: var(--snowball-text-secondary);
   padding: 0 4px;
 }
-.snowball-overlay-close:hover { color: var(--fill-primary, inherit); }
+.snowball-overlay-close:hover {
+  color: var(--fill-primary, inherit);
+}
 
 .snowball-overlay-body {
   padding: 12px 14px;
@@ -632,7 +691,9 @@
   padding: 8px 0;
   border-bottom: 1px solid var(--snowball-border);
 }
-.snowball-failed-list li:last-child { border-bottom: 0; }
+.snowball-failed-list li:last-child {
+  border-bottom: 0;
+}
 
 .snowball-failed-title {
   font-weight: 600;
@@ -659,7 +720,9 @@
 /* The .snowball-body needs to be a positioning context so the absolutely-
    positioned overlay above can confine itself to the dialog content area
    instead of escaping to the OS window. */
-.snowball-body { position: relative; }
+.snowball-body {
+  position: relative;
+}
 
 /* ============================================================
  * Min-cites filter (lives in the main toolbar row)
@@ -711,7 +774,9 @@
   padding-top: 12px;
   border-top: 1px solid var(--snowball-border);
 }
-.snowball-detail-breakdown[hidden] { display: none; }
+.snowball-detail-breakdown[hidden] {
+  display: none;
+}
 
 .snowball-detail-breakdown-title {
   font-size: 11.5px;
@@ -780,13 +845,27 @@
  * between pref names and CSS classes is obvious.
  * ============================================================ */
 
-.snowball-dialog.hide-col-score      .col-score     { display: none; }
-.snowball-dialog.hide-col-direction  .col-direction { display: none; }
-.snowball-dialog.hide-col-status     .col-status    { display: none; }
-.snowball-dialog.hide-col-year       .col-year      { display: none; }
-.snowball-dialog.hide-col-authors    .col-authors   { display: none; }
-.snowball-dialog.hide-col-venue      .col-venue     { display: none; }
-.snowball-dialog.hide-col-citedBy    .col-cited     { display: none; }
+.snowball-dialog.hide-col-score .col-score {
+  display: none;
+}
+.snowball-dialog.hide-col-direction .col-direction {
+  display: none;
+}
+.snowball-dialog.hide-col-status .col-status {
+  display: none;
+}
+.snowball-dialog.hide-col-year .col-year {
+  display: none;
+}
+.snowball-dialog.hide-col-authors .col-authors {
+  display: none;
+}
+.snowball-dialog.hide-col-venue .col-venue {
+  display: none;
+}
+.snowball-dialog.hide-col-citedBy .col-cited {
+  display: none;
+}
 
 /* ============================================================
  * XUL <button> dark-mode override
@@ -823,7 +902,7 @@
 
   .snowball-toolbar button:active,
   .snowball-footer button:active {
-    background: rgba(255, 255, 255, 0.20);
+    background: rgba(255, 255, 255, 0.2);
   }
 
   .snowball-toolbar button[disabled],

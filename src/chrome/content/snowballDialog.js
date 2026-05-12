@@ -1,3 +1,8 @@
+// @ts-nocheck — DOM-heavy XUL chrome script. The tsc --checkJs lib.dom
+// types over-narrow `document.getElementById(...)` to `HTMLElement`, which
+// loses the `.value` / `.checked` / `.disabled` properties on input
+// elements. Tightening this file with proper JSDoc casts is tracked in
+// docs/CQ_SECURITY_ROADMAP.md.
 var SnowballDialog = {
   args: null,
   candidates: [],
@@ -38,7 +43,9 @@ var SnowballDialog = {
         if (typeof Zotero !== "undefined" && Zotero.debug) {
           Zotero.debug(message);
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
       try {
         const summary = document.getElementById("snowball-summary");
         if (summary) {
@@ -48,7 +55,9 @@ var SnowballDialog = {
         if (detail) {
           detail.textContent = String(error?.message || error);
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
     }
   },
 
@@ -59,10 +68,11 @@ var SnowballDialog = {
     this.yearBuckets = new Map();
     this.seedWorks = [];
     this.seedContext = null;
-    this.weights = (this.args.weights && typeof this.args.weights === "object")
-      ? this.args.weights : null;
+    this.weights =
+      this.args.weights && typeof this.args.weights === "object" ? this.args.weights : null;
     this.state.minCitedBy = Number.isFinite(this.args.flags?.minCitedBy)
-      ? Math.max(0, this.args.flags.minCitedBy) : 0;
+      ? Math.max(0, this.args.flags.minCitedBy)
+      : 0;
 
     this.bindControls();
     this.initSplitter();
@@ -91,9 +101,9 @@ var SnowballDialog = {
       // arriving before the first `seed-resolved` event still get scored
       // sensibly. Once seed Works arrive we rebuild with full signals.
       if (typeof SnowballRanking !== "undefined") {
-        this.seedContext = SnowballRanking.buildSeedContext(
-          this.args.seeds, [], { weights: this.weights }
-        );
+        this.seedContext = SnowballRanking.buildSeedContext(this.args.seeds, [], {
+          weights: this.weights
+        });
       }
       this.startStreaming();
     } else {
@@ -111,17 +121,18 @@ var SnowballDialog = {
     let provider;
     try {
       if (typeof OpenAlexProvider === "undefined") {
-        throw new Error(
-          "OpenAlexProvider not loaded — chrome modules failed to register."
-        );
+        throw new Error("OpenAlexProvider not loaded — chrome modules failed to register.");
       }
       provider = new OpenAlexProvider(this.args.providerConfig || {});
     } catch (error) {
       this.setLoading(false);
       this.setStatus("Failed to start");
       this.setProgress(String(error?.message || error));
-      try { Zotero?.debug?.(`Snowball Sources: provider init failed: ${error?.stack || error}`); }
-      catch (_) { /* ignore */ }
+      try {
+        Zotero?.debug?.(`Snowball Sources: provider init failed: ${error?.stack || error}`);
+      } catch (_) {
+        /* ignore */
+      }
       return;
     }
 
@@ -153,9 +164,9 @@ var SnowballDialog = {
           // (≤ a few seeds × small sets).
           if (event.work) this.seedWorks.push(event.work);
           if (typeof SnowballRanking !== "undefined") {
-            this.seedContext = SnowballRanking.buildSeedContext(
-              this.args.seeds, this.seedWorks, { weights: this.weights }
-            );
+            this.seedContext = SnowballRanking.buildSeedContext(this.args.seeds, this.seedWorks, {
+              weights: this.weights
+            });
           }
           continue;
         }
@@ -181,7 +192,9 @@ var SnowballDialog = {
           } else {
             Zotero?.debug?.(`Snowball stream failed: ${error?.stack || error}`);
           }
-        } catch (_) { /* ignore */ }
+        } catch (_) {
+          /* ignore */
+        }
       }
     } finally {
       this.flushRefresh();
@@ -197,7 +210,9 @@ var SnowballDialog = {
               if (typeof SnowballLog !== "undefined") {
                 SnowballLog.warn("S2 refinement failed", { error: SnowballLog.formatError(error) });
               }
-            } catch (_) { /* ignore */ }
+            } catch (_) {
+              /* ignore */
+            }
           }
         }
       }
@@ -245,10 +260,12 @@ var SnowballDialog = {
     this.setStatus("Refining with Semantic Scholar…");
     this.setProgress("Fetching SPECTER2 embeddings…");
 
-    const seedDois = (this.args.seeds || []).map(s => s?.doi).filter(Boolean);
-    const candDois = this.candidates.map(c => c?.doi).filter(Boolean);
+    const seedDois = (this.args.seeds || []).map((s) => s?.doi).filter(Boolean);
+    const candDois = this.candidates.map((c) => c?.doi).filter(Boolean);
     if (!seedDois.length || !candDois.length) {
-      this.setProgress("Semantic Scholar: not enough DOIs for refinement; keeping baseline scores.");
+      this.setProgress(
+        "Semantic Scholar: not enough DOIs for refinement; keeping baseline scores."
+      );
       return;
     }
 
@@ -280,7 +297,9 @@ var SnowballDialog = {
     // Apply embedding similarity to each candidate that has a vector.
     let enriched = 0;
     for (const c of this.candidates) {
-      const doi = String(c.doi || "").trim().toLowerCase()
+      const doi = String(c.doi || "")
+        .trim()
+        .toLowerCase()
         .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
         .replace(/^doi:/i, "");
       const v = doi ? candEmbeds.get(doi) : null;
@@ -296,7 +315,9 @@ var SnowballDialog = {
       }
     }
 
-    this.setProgress(`Refined ${enriched} of ${this.candidates.length} candidate${this.candidates.length === 1 ? "" : "s"} with Semantic Scholar`);
+    this.setProgress(
+      `Refined ${enriched} of ${this.candidates.length} candidate${this.candidates.length === 1 ? "" : "s"} with Semantic Scholar`
+    );
   },
 
   stop() {
@@ -325,9 +346,8 @@ var SnowballDialog = {
     // Need" vs "Attention is All You Need: …") that exact-key dedupe
     // misses. Only compare within the same year-bucket to keep this O(N)
     // overall instead of O(N²) across the full candidate set.
-    const candTrigrams = (typeof SnowballUtil !== "undefined")
-      ? SnowballUtil.trigrams(raw.title || "")
-      : new Set();
+    const candTrigrams =
+      typeof SnowballUtil !== "undefined" ? SnowballUtil.trigrams(raw.title || "") : new Set();
     if (candTrigrams.size) {
       const fuzzy = this.findFuzzyDuplicate(raw, candTrigrams);
       if (fuzzy) {
@@ -346,11 +366,15 @@ var SnowballDialog = {
       } catch (error) {
         try {
           if (typeof SnowballLog !== "undefined") {
-            SnowballLog.warn("markExistingCandidate failed", { error: SnowballLog.formatError(error) });
+            SnowballLog.warn("markExistingCandidate failed", {
+              error: SnowballLog.formatError(error)
+            });
           } else {
             Zotero?.debug?.(`markExistingCandidate failed: ${error}`);
           }
-        } catch (_) { /* ignore */ }
+        } catch (_) {
+          /* ignore */
+        }
       }
     }
 
@@ -386,10 +410,7 @@ var SnowballDialog = {
     if (existing.direction !== raw.direction && raw.direction) {
       existing.direction = "both";
     }
-    existing.citedByCount = Math.max(
-      existing.citedByCount || 0,
-      raw.citedByCount || 0
-    );
+    existing.citedByCount = Math.max(existing.citedByCount || 0, raw.citedByCount || 0);
     if (!existing.abstract && raw.abstract) existing.abstract = raw.abstract;
     if (!existing.venue && raw.venue) existing.venue = raw.venue;
     if (!existing.doi && raw.doi) existing.doi = raw.doi;
@@ -415,10 +436,14 @@ var SnowballDialog = {
   },
 
   dedupeKey(candidate) {
-    const doi = String(candidate.doi || "").trim().toLowerCase();
+    const doi = String(candidate.doi || "")
+      .trim()
+      .toLowerCase();
     if (doi) return `doi:${doi}`;
     if (candidate.openAlexID) return `oa:${candidate.openAlexID}`;
-    const title = String(candidate.title || "").trim().toLowerCase();
+    const title = String(candidate.title || "")
+      .trim()
+      .toLowerCase();
     return title ? `title:${title}:${candidate.year || ""}` : "";
   },
 
@@ -474,43 +499,39 @@ var SnowballDialog = {
 
   bindControls() {
     const filterInput = document.getElementById("snowball-filter");
-    filterInput.addEventListener("input", event => {
+    filterInput.addEventListener("input", (event) => {
       this.state.filter = event.target.value;
       this.refresh();
     });
 
-    document.getElementById("snowball-direction-filter")
-      .addEventListener("change", event => {
-        this.state.direction = event.target.value;
-        this.refresh();
-      });
+    document.getElementById("snowball-direction-filter").addEventListener("change", (event) => {
+      this.state.direction = event.target.value;
+      this.refresh();
+    });
 
-    document.getElementById("snowball-hide-existing")
-      .addEventListener("change", event => {
-        this.state.hideExisting = event.target.checked;
-        this.refresh();
-      });
+    document.getElementById("snowball-hide-existing").addEventListener("change", (event) => {
+      this.state.hideExisting = event.target.checked;
+      this.refresh();
+    });
 
     // Min-cites runtime input (default seeded from prefs).
     const minCitesInput = document.getElementById("snowball-mincites-input");
     if (minCitesInput) {
       minCitesInput.value = String(this.state.minCitedBy || 0);
-      minCitesInput.addEventListener("input", event => {
+      minCitesInput.addEventListener("input", (event) => {
         const n = Number(event.target.value);
         this.state.minCitedBy = Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
         this.refresh();
       });
     }
 
-
-    document.getElementById("snowball-select-all")
-      .addEventListener("change", event => {
-        const visible = this.getVisibleCandidates();
-        for (const candidate of visible) {
-          candidate._selected = event.target.checked;
-        }
-        this.refresh();
-      });
+    document.getElementById("snowball-select-all").addEventListener("change", (event) => {
+      const visible = this.getVisibleCandidates();
+      for (const candidate of visible) {
+        candidate._selected = event.target.checked;
+      }
+      this.refresh();
+    });
 
     for (const th of document.querySelectorAll("th.sortable")) {
       th.addEventListener("click", () => {
@@ -529,19 +550,21 @@ var SnowballDialog = {
 
     // Toast / details-overlay wiring (in-dialog replacements for the
     // ugly default `[JavaScript Application]` alert popup).
-    document.getElementById("snowball-toast-dismiss")
+    document
+      .getElementById("snowball-toast-dismiss")
       ?.addEventListener("click", () => this.hideToast());
-    document.getElementById("snowball-overlay-close")
+    document
+      .getElementById("snowball-overlay-close")
       ?.addEventListener("click", () => this.hideOverlay());
-    document.getElementById("snowball-overlay-ok")
+    document
+      .getElementById("snowball-overlay-ok")
       ?.addEventListener("click", () => this.hideOverlay());
     // Click outside the overlay card to dismiss.
-    document.getElementById("snowball-details-overlay")
-      ?.addEventListener("click", event => {
-        if (event.target.id === "snowball-details-overlay") this.hideOverlay();
-      });
+    document.getElementById("snowball-details-overlay")?.addEventListener("click", (event) => {
+      if (event.target.id === "snowball-details-overlay") this.hideOverlay();
+    });
     // Esc dismisses overlay/toast.
-    window.addEventListener("keydown", event => {
+    window.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
       const overlay = document.getElementById("snowball-details-overlay");
       if (overlay && !overlay.hasAttribute("hidden")) {
@@ -551,7 +574,7 @@ var SnowballDialog = {
     });
 
     // Allow ⌘F / Ctrl+F to focus the filter box.
-    window.addEventListener("keydown", event => {
+    window.addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "f") {
         event.preventDefault();
         filterInput.focus();
@@ -566,11 +589,19 @@ var SnowballDialog = {
     // Cancel any in-flight stream when the user closes the window.
     window.addEventListener("unload", () => {
       if (this.abortController && !this.abortController.signal.aborted) {
-        try { this.abortController.abort(); } catch (_) { /* ignore */ }
+        try {
+          this.abortController.abort();
+        } catch (_) {
+          /* ignore */
+        }
       }
       // Final write before the window dies — synchronous so the prefs
       // hit disk before we're gone.
-      try { this._saveUIStateNow(); } catch (_) { /* ignore */ }
+      try {
+        this._saveUIStateNow();
+      } catch (_) {
+        /* ignore */
+      }
     });
   },
 
@@ -580,22 +611,29 @@ var SnowballDialog = {
     if (!state || typeof state !== "object") return;
     try {
       if (Number.isFinite(state.width) && Number.isFinite(state.height)) {
-        const w = Math.max(900,  Math.min(3000, state.width));
-        const h = Math.max(520,  Math.min(3000, state.height));
+        const w = Math.max(900, Math.min(3000, state.width));
+        const h = Math.max(520, Math.min(3000, state.height));
         // Defer to next tick so the dialog has finished its initial layout
         // before we resize it (some Mozilla builds ignore resizeTo() called
         // during onload).
         setTimeout(() => {
-          try { window.resizeTo(w, h); } catch (_) { /* ignore */ }
+          try {
+            window.resizeTo(w, h);
+          } catch (_) {
+            /* ignore */
+          }
         }, 0);
       }
       if (Number.isFinite(state.detailsWidth)) {
         const dw = Math.max(240, Math.min(2000, state.detailsWidth));
         document.documentElement.style.setProperty(
-          "--snowball-details-width", `${Math.round(dw)}px`
+          "--snowball-details-width",
+          `${Math.round(dw)}px`
         );
       }
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
   },
 
   /**
@@ -611,7 +649,7 @@ var SnowballDialog = {
     for (const [key, visible] of Object.entries(columns)) {
       const cls = `hide-col-${key}`;
       if (visible === false) dialog.classList.add(cls);
-      else                   dialog.classList.remove(cls);
+      else dialog.classList.remove(cls);
     }
   },
 
@@ -630,8 +668,8 @@ var SnowballDialog = {
         ? Math.round(detailsRoot.getBoundingClientRect().width)
         : null;
       const state = {
-        width:        Math.round(window.outerWidth || 0),
-        height:       Math.round(window.outerHeight || 0),
+        width: Math.round(window.outerWidth || 0),
+        height: Math.round(window.outerHeight || 0),
         detailsWidth: detailsWidth || 0
       };
       // Hand off to the controller. Going via args.plugin keeps prefs
@@ -641,7 +679,9 @@ var SnowballDialog = {
       if (plugin && typeof plugin.saveUIState === "function") {
         plugin.saveUIState(state);
       }
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
   },
 
   initSplitter() {
@@ -656,7 +696,7 @@ var SnowballDialog = {
     let startX = 0;
     let startWidth = 0;
 
-    const onDown = event => {
+    const onDown = (event) => {
       if (event.button !== 0) return;
       dragging = true;
       startX = event.clientX;
@@ -666,7 +706,7 @@ var SnowballDialog = {
       event.preventDefault();
     };
 
-    const onMove = event => {
+    const onMove = (event) => {
       if (!dragging) return;
       const bodyRect = body.getBoundingClientRect();
       // Drag toward the left edge → details panel grows.
@@ -703,15 +743,24 @@ var SnowballDialog = {
 
   sortValue(candidate, key) {
     switch (key) {
-      case "authors":            return this.formatAuthors(candidate, 5).toLowerCase();
-      case "title":              return (candidate.title || "").toLowerCase();
-      case "venue":              return (candidate.venue || "").toLowerCase();
-      case "direction":          return candidate.direction || "";
-      case "alreadyInLibrary":   return candidate.alreadyInLibrary ? 1 : 0;
-      case "relevanceScore":     return Number(candidate.relevanceScore) || 0;
-      case "year":               return Number(candidate.year) || 0;
-      case "citedByCount":       return Number(candidate.citedByCount) || 0;
-      default:                   return "";
+      case "authors":
+        return this.formatAuthors(candidate, 5).toLowerCase();
+      case "title":
+        return (candidate.title || "").toLowerCase();
+      case "venue":
+        return (candidate.venue || "").toLowerCase();
+      case "direction":
+        return candidate.direction || "";
+      case "alreadyInLibrary":
+        return candidate.alreadyInLibrary ? 1 : 0;
+      case "relevanceScore":
+        return Number(candidate.relevanceScore) || 0;
+      case "year":
+        return Number(candidate.year) || 0;
+      case "citedByCount":
+        return Number(candidate.citedByCount) || 0;
+      default:
+        return "";
     }
   },
 
@@ -719,21 +768,20 @@ var SnowballDialog = {
     let list = this.candidates;
 
     if (this.state.hideExisting) {
-      list = list.filter(c => !c.alreadyInLibrary);
+      list = list.filter((c) => !c.alreadyInLibrary);
     }
 
     if (this.state.direction !== "all") {
-      list = list.filter(c =>
-        c.direction === this.state.direction || c.direction === "both"
-      );
+      list = list.filter((c) => c.direction === this.state.direction || c.direction === "both");
     }
 
     const query = this.state.filter.trim().toLowerCase();
     if (query) {
-      list = list.filter(c =>
-        (c.title || "").toLowerCase().includes(query) ||
-        this.formatAuthors(c, 99).toLowerCase().includes(query) ||
-        (c.venue || "").toLowerCase().includes(query)
+      list = list.filter(
+        (c) =>
+          (c.title || "").toLowerCase().includes(query) ||
+          this.formatAuthors(c, 99).toLowerCase().includes(query) ||
+          (c.venue || "").toLowerCase().includes(query)
       );
     }
 
@@ -741,7 +789,7 @@ var SnowballDialog = {
     // 0 is allowed to pass when minCitedBy is 0.
     if (this.state.minCitedBy > 0) {
       const min = this.state.minCitedBy;
-      list = list.filter(c => (Number(c.citedByCount) || 0) >= min);
+      list = list.filter((c) => (Number(c.citedByCount) || 0) >= min);
     }
 
     const { key, dir } = this.state.sort;
@@ -802,7 +850,7 @@ var SnowballDialog = {
       tr.classList.add("selected");
     }
 
-    tr.addEventListener("click", event => {
+    tr.addEventListener("click", (event) => {
       if (event.target?.localName !== "input") {
         this.showDetails(candidate._index);
       }
@@ -840,8 +888,8 @@ var SnowballDialog = {
       return;
     }
     checkbox.disabled = false;
-    const all = visible.every(c => c._selected);
-    const some = visible.some(c => c._selected);
+    const all = visible.every((c) => c._selected);
+    const some = visible.some((c) => c._selected);
     checkbox.checked = all;
     checkbox.indeterminate = !all && some;
   },
@@ -849,7 +897,7 @@ var SnowballDialog = {
   updateCounts(visible) {
     const total = this.candidates.length;
     const visibleCount = visible.length;
-    const selected = this.candidates.filter(c => c._selected).length;
+    const selected = this.candidates.filter((c) => c._selected).length;
     const word = total === 1 ? "candidate" : "candidates";
 
     const summary = document.getElementById("snowball-summary");
@@ -857,17 +905,14 @@ var SnowballDialog = {
       if (this.loading && total === 0) {
         summary.textContent = "Searching…";
       } else {
-        summary.textContent = total === visibleCount
-          ? `${total} ${word}`
-          : `${visibleCount} of ${total} ${word}`;
+        summary.textContent =
+          total === visibleCount ? `${total} ${word}` : `${visibleCount} of ${total} ${word}`;
       }
     }
 
     const counter = document.getElementById("snowball-selection-count");
     if (counter) {
-      counter.textContent = selected === 1
-        ? "1 selected"
-        : `${selected} selected`;
+      counter.textContent = selected === 1 ? "1 selected" : `${selected} selected`;
     }
 
     const addButton = document.getElementById("snowball-add-selected");
@@ -884,7 +929,7 @@ var SnowballDialog = {
     const input = this.createHTMLElement("input");
     input.type = "checkbox";
     input.checked = !!candidate._selected;
-    input.addEventListener("click", event => event.stopPropagation());
+    input.addEventListener("click", (event) => event.stopPropagation());
     input.addEventListener("change", () => {
       candidate._selected = input.checked;
       // Update select-all + counter without re-rendering the entire table.
@@ -897,16 +942,16 @@ var SnowballDialog = {
     return cell;
   },
 
-  appendScoreCell(tr, score, candidate) {
+  appendScoreCell(tr, score, _candidate) {
     const cell = this.createHTMLElement("td");
     cell.className = "col-score";
     const value = Math.round((Number(score) || 0) * 100);
     const pill = this.createHTMLElement("span");
     pill.className = "snowball-score-pill";
     pill.textContent = String(value);
-    if (value >= 50)      pill.classList.add("snowball-score-high");
+    if (value >= 50) pill.classList.add("snowball-score-high");
     else if (value >= 25) pill.classList.add("snowball-score-mid");
-    else                  pill.classList.add("snowball-score-low");
+    else pill.classList.add("snowball-score-low");
     cell.appendChild(pill);
     tr.appendChild(cell);
     return cell;
@@ -966,8 +1011,7 @@ var SnowballDialog = {
       if (target) target.classList.add("selected");
     }
 
-    document.getElementById("snowball-detail-title").textContent =
-      candidate.title || "Untitled";
+    document.getElementById("snowball-detail-title").textContent = candidate.title || "Untitled";
 
     // Meta line: year · venue · clickable DOI / landing-page link.
     const meta = document.getElementById("snowball-detail-meta");
@@ -990,7 +1034,7 @@ var SnowballDialog = {
         meta.appendChild(node);
         first = false;
       };
-      if (candidate.year)  push(text(candidate.year));
+      if (candidate.year) push(text(candidate.year));
       if (candidate.venue) push(text(candidate.venue));
       // Prefer DOI link, fall back to candidate.url, fall back to OpenAlex page.
       const linkSpec = this._resolveDetailLink(candidate);
@@ -1014,7 +1058,7 @@ var SnowballDialog = {
    */
   _renderScoreBreakdown(candidate) {
     const section = document.getElementById("snowball-detail-breakdown");
-    const list    = document.getElementById("snowball-detail-breakdown-list");
+    const list = document.getElementById("snowball-detail-breakdown-list");
     if (!section || !list) return;
 
     const b = candidate?._scoreBreakdown;
@@ -1052,19 +1096,27 @@ var SnowballDialog = {
     };
 
     // Always-present signals first.
-    addRow("Text similarity",        b.text);
-    addRow("Bibliographic coupling", b.bibCoupling,
-      b.bibCouplingRaw ? `${b.bibCouplingRaw} shared ref${b.bibCouplingRaw === 1 ? "" : "s"}` : null);
-    addRow("Co-citation",            b.coCitation,
-      b.coCitationRaw ? `${b.coCitationRaw} seed${b.coCitationRaw === 1 ? "" : "s"} cite this` : null);
-    addRow("Author overlap",         b.authorOverlap);
-    addRow("Title fuzzy match",      b.titleTrigram);
-    addRow("Citation count",         b.citation);
+    addRow("Text similarity", b.text);
+    addRow(
+      "Bibliographic coupling",
+      b.bibCoupling,
+      b.bibCouplingRaw ? `${b.bibCouplingRaw} shared ref${b.bibCouplingRaw === 1 ? "" : "s"}` : null
+    );
+    addRow(
+      "Co-citation",
+      b.coCitation,
+      b.coCitationRaw
+        ? `${b.coCitationRaw} seed${b.coCitationRaw === 1 ? "" : "s"} cite this`
+        : null
+    );
+    addRow("Author overlap", b.authorOverlap);
+    addRow("Title fuzzy match", b.titleTrigram);
+    addRow("Citation count", b.citation);
     // Optional / conditional signals.
-    if (b.embedding > 0)    addRow("Semantic Scholar embedding", b.embedding);
-    if (b.abstractPenalty)  addRow("No abstract",                b.abstractPenalty);
-    if (b.duplicatePenalty) addRow("Already in library",         b.duplicatePenalty);
-    if (b.directionBoost)   addRow("Both directions bonus",      b.directionBoost);
+    if (b.embedding > 0) addRow("Semantic Scholar embedding", b.embedding);
+    if (b.abstractPenalty) addRow("No abstract", b.abstractPenalty);
+    if (b.duplicatePenalty) addRow("Already in library", b.duplicatePenalty);
+    if (b.directionBoost) addRow("Both directions bonus", b.directionBoost);
 
     section.removeAttribute("hidden");
   },
@@ -1072,8 +1124,7 @@ var SnowballDialog = {
   _resolveDetailLink(candidate) {
     const doi = String(candidate.doi || "").trim();
     if (doi) {
-      const safe = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
-                       .replace(/^doi:/i, "");
+      const safe = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").replace(/^doi:/i, "");
       return { label: `DOI: ${safe}`, url: `https://doi.org/${encodeURI(safe)}` };
     }
     if (typeof candidate.url === "string" && /^https?:\/\//i.test(candidate.url)) {
@@ -1099,7 +1150,7 @@ var SnowballDialog = {
     a.href = url;
     a.textContent = label;
     a.title = url;
-    a.addEventListener("click", event => {
+    a.addEventListener("click", (event) => {
       event.preventDefault();
       try {
         if (typeof Zotero !== "undefined" && typeof Zotero.launchURL === "function") {
@@ -1107,7 +1158,9 @@ var SnowballDialog = {
         } else {
           window.open(url, "_blank", "noopener,noreferrer");
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
     });
     return a;
   },
@@ -1129,19 +1182,17 @@ var SnowballDialog = {
    *        Hide the toast after this many ms. 0 = persistent.
    */
   showToast({ message, kind = "success", action = null, autoCloseMs = 0 } = {}) {
-    const toast    = document.getElementById("snowball-toast");
+    const toast = document.getElementById("snowball-toast");
     const messageEl = document.getElementById("snowball-toast-message");
-    const actionEl  = document.getElementById("snowball-toast-action");
-    const iconEl    = document.getElementById("snowball-toast-icon");
+    const actionEl = document.getElementById("snowball-toast-action");
+    const iconEl = document.getElementById("snowball-toast-icon");
     if (!toast || !messageEl || !actionEl || !iconEl) return;
 
     toast.classList.remove("toast-success", "toast-warning", "toast-error");
     toast.classList.add(`toast-${kind}`);
     messageEl.textContent = String(message || "");
     iconEl.textContent =
-      kind === "success" ? "✓" :
-      kind === "warning" ? "!" :
-      kind === "error"   ? "✕" : "•";
+      kind === "success" ? "✓" : kind === "warning" ? "!" : kind === "error" ? "✕" : "•";
 
     // Reset action button between calls.
     actionEl.onclick = null;
@@ -1149,12 +1200,16 @@ var SnowballDialog = {
       actionEl.removeAttribute("hidden");
       actionEl.textContent = action.label;
       actionEl.onclick = () => {
-        try { action.onClick(); } catch (e) {
+        try {
+          action.onClick();
+        } catch (e) {
           try {
             if (typeof SnowballLog !== "undefined") {
               SnowballLog.warn("toast action failed", { error: SnowballLog.formatError(e) });
             }
-          } catch (_) { /* ignore */ }
+          } catch (_) {
+            /* ignore */
+          }
         }
       };
     } else {
@@ -1187,13 +1242,13 @@ var SnowballDialog = {
    */
   showFailedDetails(failed) {
     const overlay = document.getElementById("snowball-details-overlay");
-    const body    = document.getElementById("snowball-overlay-body");
+    const body = document.getElementById("snowball-overlay-body");
     if (!overlay || !body) return;
 
     body.replaceChildren();
     const ul = this.createHTMLElement("ul");
     ul.className = "snowball-failed-list";
-    for (const f of (Array.isArray(failed) ? failed : [])) {
+    for (const f of Array.isArray(failed) ? failed : []) {
       const li = this.createHTMLElement("li");
       const title = this.createHTMLElement("div");
       title.className = "snowball-failed-title";
@@ -1211,8 +1266,7 @@ var SnowballDialog = {
   },
 
   hideOverlay() {
-    document.getElementById("snowball-details-overlay")
-      ?.setAttribute("hidden", "hidden");
+    document.getElementById("snowball-details-overlay")?.setAttribute("hidden", "hidden");
   },
 
   // ---------- Add to Zotero ------------------------------------------------
@@ -1222,7 +1276,7 @@ var SnowballDialog = {
     button.disabled = true;
 
     try {
-      const selected = this.candidates.filter(c => c._selected);
+      const selected = this.candidates.filter((c) => c._selected);
       if (!selected.length) {
         this.showToast({
           message: "Select at least one candidate to add.",
@@ -1234,18 +1288,24 @@ var SnowballDialog = {
       }
 
       const result = await this.args.plugin.addCandidatesToZotero(selected, this.args.target);
-      const failed   = Array.isArray(result?.failed) ? result.failed : [];
-      const addedN   = result?.added?.length   || 0;
+      const failed = Array.isArray(result?.failed) ? result.failed : [];
+      const addedN = result?.added?.length || 0;
       const skippedN = result?.skipped?.length || 0;
-      const failedN  = failed.length;
-      const pdfsN    = Number(result?.downloadsStarted) || 0;
+      const failedN = failed.length;
+      const pdfsN = Number(result?.downloadsStarted) || 0;
 
       const summary = this._formatAddSummary(addedN, skippedN, failedN, pdfsN);
 
       if (failedN === 0) {
         // Happy path: brief confirmation, then close the dialog.
         this.showToast({ message: summary, kind: "success", autoCloseMs: 2200 });
-        setTimeout(() => { try { window.close(); } catch (_) { /* ignore */ } }, 2200);
+        setTimeout(() => {
+          try {
+            window.close();
+          } catch (_) {
+            /* ignore */
+          }
+        }, 2200);
       } else {
         // Partial failure: keep the dialog open so the user can investigate.
         this.showToast({
@@ -1260,14 +1320,17 @@ var SnowballDialog = {
         button.disabled = false;
       }
     } catch (error) {
-      const friendly = (typeof formatUserError === "function")
-        ? formatUserError(error)
-        : (error?.message || String(error));
+      const friendly =
+        typeof formatUserError === "function"
+          ? formatUserError(error)
+          : error?.message || String(error);
       try {
         if (typeof SnowballLog !== "undefined") {
           SnowballLog.error("addSelected failed", { error: SnowballLog.formatError(error) });
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
       this.showToast({
         message: `Couldn't add items: ${friendly}`,
         kind: "error",
@@ -1279,12 +1342,13 @@ var SnowballDialog = {
 
   _formatAddSummary(addedN, skippedN, failedN, pdfsN = 0) {
     const parts = [];
-    if (addedN > 0)   parts.push(`Added ${addedN} ${addedN === 1 ? "item" : "items"} to Zotero`);
+    if (addedN > 0) parts.push(`Added ${addedN} ${addedN === 1 ? "item" : "items"} to Zotero`);
     if (skippedN > 0) parts.push(`updated ${skippedN} existing`);
-    if (failedN > 0)  parts.push(`${failedN} couldn't be added`);
-    if (pdfsN > 0)    parts.push(`downloading ${pdfsN} PDF${pdfsN === 1 ? "" : "s"} in the background`);
+    if (failedN > 0) parts.push(`${failedN} couldn't be added`);
+    if (pdfsN > 0)
+      parts.push(`downloading ${pdfsN} PDF${pdfsN === 1 ? "" : "s"} in the background`);
     if (!parts.length) return "Nothing added.";
-    let joined = parts.join("; ");
+    const joined = parts.join("; ");
     return joined.charAt(0).toUpperCase() + joined.slice(1);
   },
 
@@ -1292,16 +1356,20 @@ var SnowballDialog = {
 
   directionLabel(direction) {
     switch (direction) {
-      case "backward": return "← Backward";
-      case "forward":  return "Forward →";
-      case "both":     return "↔ Both";
-      default:         return direction || "";
+      case "backward":
+        return "← Backward";
+      case "forward":
+        return "Forward →";
+      case "both":
+        return "↔ Both";
+      default:
+        return direction || "";
     }
   },
 
   formatAuthors(candidate, limit = 5) {
     return (candidate.authors || [])
-      .map(author => author.name || [author.firstName, author.lastName].filter(Boolean).join(" "))
+      .map((author) => author.name || [author.firstName, author.lastName].filter(Boolean).join(" "))
       .filter(Boolean)
       .slice(0, limit)
       .join(", ");

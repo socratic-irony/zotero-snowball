@@ -42,8 +42,9 @@ function formatUserError(error) {
   if (error.name === "AbortError") return "Canceled.";
   if (error.userMessage) return error.userMessage;
   // Best-effort: if we ended up with a raw Error, scrub its message.
-  const scrub = (typeof SnowballLog !== "undefined" && SnowballLog.scrub)
-    ? SnowballLog.scrub.bind(SnowballLog)
-    : (s) => s;
+  const scrub =
+    typeof SnowballLog !== "undefined" && SnowballLog.scrub
+      ? SnowballLog.scrub.bind(SnowballLog)
+      : (s) => s;
   return scrub(String(error.message || error));
 }

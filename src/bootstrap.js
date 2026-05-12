@@ -15,8 +15,9 @@ async function startup({ id, version, rootURI }) {
   log(`Starting ${version}`);
 
   try {
-    const aomStartup = Cc["@mozilla.org/addons/addon-manager-startup;1"]
-      .getService(Ci.amIAddonManagerStartup);
+    const aomStartup = Cc["@mozilla.org/addons/addon-manager-startup;1"].getService(
+      Ci.amIAddonManagerStartup
+    );
     const manifestURI = Services.io.newURI(rootURI + "manifest.json");
     SnowballChromeHandle = aomStartup.registerChrome(manifestURI, [
       ["content", "snowball-sources", "chrome/content/"]
@@ -51,10 +52,10 @@ async function startup({ id, version, rootURI }) {
     // cleanly, instead of the menu items appearing dead.
     try {
       const win = Services.wm.getMostRecentWindow("navigator:browser");
-      win?.alert?.(
-        "Snowball Sources failed to start. Please check the Zotero debug log."
-      );
-    } catch (_) { /* ignore */ }
+      win?.alert?.("Snowball Sources failed to start. Please check the Zotero debug log.");
+    } catch (_) {
+      /* ignore */
+    }
   }
 }
 

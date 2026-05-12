@@ -109,7 +109,7 @@ Zotero still did not list the add-on in `extensions.json` after restart. Next se
      - `linkset` localization,
      - `script src`,
      - HTML table/aside,
-     one at a time.
+       one at a time.
 
 6. Strong candidate causes to test next:
    - The dialog's custom XHTML/XUL structure may need a `<dialog>` child like Zotero's `selectItemsDialog.xhtml` and `searchDialog.xhtml`.
