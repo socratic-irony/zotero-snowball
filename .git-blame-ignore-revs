@@ -1,0 +1,9 @@
+# Revisions listed here are skipped by `git blame` when configured with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Use this for whole-tree mechanical reformats so blame still points at
+# the author who wrote the *substantive* line, not the auto-formatter.
+
+# style: apply Prettier across the codebase, fix lint/typecheck findings
+# (initial Prettier reformat after landing the eslint/prettier/tsc tooling)
+d8f55cf177a56f1a31e3c3c41355e49aaee7f875
