@@ -1,0 +1,12 @@
+build/
+node_modules/
+*.xpi
+src/icons/
+src/chrome/content/icons/
+updates.json
+CHANGELOG.md
+
+# XUL/XHTML chrome documents — whitespace inside processing instructions
+# and XUL elements is semantically meaningful and our tests assert on
+# specific single-line forms. xmllint already validates structure.
+*.xhtml
