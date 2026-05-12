@@ -15,8 +15,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Test & build
+  # Cheap static checks run first so a typo or formatting drift fails fast,
+  # before we pay for the build matrix below. Mirrors lefthook.yml so a green
+  # `git push` predicts green CI.
+  static:
+    name: Lint, format, typecheck
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,6 +29,33 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "22"
+          cache: npm
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: ESLint (zero warnings)
+        run: npx eslint . --max-warnings=0
+
+      - name: Prettier check
+        run: npx prettier --check .
+
+      - name: Typecheck (tsc --checkJs)
+        run: npx tsc --noEmit -p tsconfig.json
+
+  test:
+    name: Test & build
+    needs: static
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
 
       - name: Install libxml2-utils (xmllint) and zip
         run: |
@@ -33,8 +63,7 @@ jobs:
           sudo apt-get install -y libxml2-utils zip
 
       - name: Install npm deps
-        # No runtime deps; this just verifies package.json is well-formed.
-        run: npm ci || npm install --no-save
+        run: npm ci
 
       - name: Validate manifest JSON
         run: python3 -m json.tool src/manifest.json > /dev/null
