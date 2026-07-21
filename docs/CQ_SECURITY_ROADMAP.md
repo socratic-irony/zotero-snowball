@@ -81,6 +81,32 @@ standalone PR. Strike items as they ship.
 - [ ] **`yamllint`** for `.yml` consistency.
 - [ ] **`markdownlint-cli2`** for README/CHANGELOG.
 
+### Release-touchpoint sync
+
+The lesson from "we landed CQ tooling but no release fired": every version
+bump touches a constellation of files (manifest, package.json, CHANGELOG,
+sometimes README badges or screenshots) and missing one is a silent bug.
+These items make that constellation mechanically enforced.
+
+- [ ] **Teach `scripts/bump-version.sh` to also touch README + CHANGELOG**
+      so the bump is a one-shot atomic operation. Two sub-tasks: rewrite any
+      `Current version: vX.Y.Z` / shields.io badge line in README, and
+      prepend a dated `## [X.Y.Z] - YYYY-MM-DD` stub to CHANGELOG so the
+      author can't forget the entry.
+- [ ] **CI tripwire on missing release-doc updates** — when a PR changes
+      `src/manifest.json`'s `version`, fail if `CHANGELOG.md` and `README.md`
+      haven't also changed in the same PR. Cheap `git diff --name-only`
+      check inside the existing `static` job.
+- [ ] **AGENTS.md** (and a matching `CLAUDE.md` symlink) documenting the
+      release checklist for both human contributors and AI agents
+      (Claude Code, Copilot, Cursor, etc.). Should explicitly list:
+      bump → README/CHANGELOG → commit → tag → push tag, plus the fact
+      that the release workflow does the actual publishing. AI agents
+      read these files first, so this is where to put "do not forget
+      step X" guidance.
+- [ ] **`updates.json` JSON schema** validated in CI (also listed under
+      Release integrity above — cross-link). Critical infra.
+
 ## Wave 3 — Code-level hardening
 
 ### HTTP / network
@@ -119,8 +145,39 @@ standalone PR. Strike items as they ship.
       `document.getElementById(...)` site. Probably 30–50 sites total.
 - [ ] **Centralize the error taxonomy** in
       [errors.js](../src/chrome/content/modules/errors.js): every throw from
-      network code is `NetworkError | TimeoutError | RateLimitedError |
-UpstreamShapeError`, never a bare `Error`. Test asserts this.
+      network code is one of NetworkError, TimeoutError, RateLimitedError,
+      or UpstreamShapeError — never a bare `Error`. Test asserts this.
+
+### Size & complexity budgets
+
+Long files and high-complexity functions are where vibe-coded bugs hide
+and where AI review windows clip context. Two ESLint rules turn this into
+a hard gate; both need a ratchet because today's baseline is over budget
+in a couple of places.
+
+- [ ] **`max-lines` rule** in [eslint.config.mjs](../eslint.config.mjs).
+      Baseline today: `snowballDialog.js` 1322, `snowball.js` 513,
+      `openalex.js` 544; every other source file is ≤ 360. Ratchet in
+      three phases — first `["warn", { max: 600 }]` (flags only the
+      one true outlier), then `["error", { max: 500 }]` after the dialog
+      split, then `["error", { max: 400 }]` as the steady state.
+      Exemptions live as per-file overrides in the config, not inline
+      disables, so the budget stays visible.
+- [ ] **`complexity` rule** for cyclomatic complexity. Most healthy JS
+      code lives under 10; over 15 is a smell, over 20 is almost always
+      rewrite territory. Ratchet: `complexity: ["warn", 20]` first
+      (surfaces the worst offenders — likely some dialog event handlers
+      and `ranking.scoreCandidate`), then `["error", 15]` after the
+      dialog split, then `["error", 10]` as the steady state. Pair with
+      `max-depth: ["error", 4]` and `max-params: ["warn", 5]` for the
+      related smells.
+- [ ] **`max-lines-per-function`** as a secondary gate:
+      `["warn", { max: 80, skipComments: true, skipBlankLines: true, IIFEs: true }]`.
+      Catches the "one big render function" pattern that big files
+      usually grow.
+- [ ] **Track the baseline** in CI by emitting a tiny report each run
+      (`eslint --format=json | jq` summary of max line/complexity per
+      file) so the ratchet is data-driven, not vibes.
 
 ### Tests
 
