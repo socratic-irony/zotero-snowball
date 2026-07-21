@@ -2,9 +2,96 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const zlib = require("node:zlib");
 const { XMLParser } = require("./xml-test-utils");
 
 const ROOT = path.resolve(__dirname, "..");
+
+function runtimeTextFiles(directory) {
+  const files = [];
+
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...runtimeTextFiles(entryPath));
+    else if (/\.(?:css|ftl|js|json|xhtml|xml)$/.test(entry.name)) files.push(entryPath);
+  }
+
+  return files;
+}
+
+function paethPredictor(left, up, upLeft) {
+  const estimate = left + up - upLeft;
+  const leftDistance = Math.abs(estimate - left);
+  const upDistance = Math.abs(estimate - up);
+  const upLeftDistance = Math.abs(estimate - upLeft);
+
+  if (leftDistance <= upDistance && leftDistance <= upLeftDistance) return left;
+  if (upDistance <= upLeftDistance) return up;
+  return upLeft;
+}
+
+function inspectRGBA8PNG(filePath) {
+  const source = fs.readFileSync(filePath);
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.deepEqual(source.subarray(0, signature.length), signature, `${filePath} must be a PNG`);
+
+  const width = source.readUInt32BE(16);
+  const height = source.readUInt32BE(20);
+  const bitDepth = source[24];
+  const colorType = source[25];
+  const compressedRows = [];
+
+  for (let offset = signature.length; offset < source.length; ) {
+    const length = source.readUInt32BE(offset);
+    const type = source.toString("ascii", offset + 4, offset + 8);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    if (type === "IDAT") compressedRows.push(source.subarray(dataStart, dataEnd));
+    offset = dataEnd + 4;
+    if (type === "IEND") break;
+  }
+
+  assert.equal(bitDepth, 8, `${filePath} must use 8-bit channels`);
+  assert.equal(colorType, 6, `${filePath} must store RGBA pixels, not an opaque RGB canvas`);
+
+  const bytesPerPixel = 4;
+  const rowLength = width * bytesPerPixel;
+  const filteredRows = zlib.inflateSync(Buffer.concat(compressedRows));
+  let previousRow = Buffer.alloc(rowLength);
+  let inputOffset = 0;
+  let hasTransparentPixel = false;
+  let hasVisiblePixel = false;
+
+  for (let y = 0; y < height; y += 1) {
+    const filter = filteredRows[inputOffset];
+    inputOffset += 1;
+    const row = Buffer.alloc(rowLength);
+
+    for (let x = 0; x < rowLength; x += 1) {
+      const byte = filteredRows[inputOffset + x];
+      const left = x >= bytesPerPixel ? row[x - bytesPerPixel] : 0;
+      const up = previousRow[x];
+      const upLeft = x >= bytesPerPixel ? previousRow[x - bytesPerPixel] : 0;
+
+      if (filter === 0) row[x] = byte;
+      else if (filter === 1) row[x] = (byte + left) & 0xff;
+      else if (filter === 2) row[x] = (byte + up) & 0xff;
+      else if (filter === 3) row[x] = (byte + Math.floor((left + up) / 2)) & 0xff;
+      else if (filter === 4) row[x] = (byte + paethPredictor(left, up, upLeft)) & 0xff;
+      else assert.fail(`${filePath} uses unsupported PNG filter ${filter}`);
+    }
+
+    for (let x = 3; x < rowLength; x += bytesPerPixel) {
+      hasTransparentPixel ||= row[x] < 255;
+      hasVisiblePixel ||= row[x] > 0;
+    }
+
+    previousRow = row;
+    inputOffset += rowLength;
+  }
+
+  return { width, height, hasTransparentPixel, hasVisiblePixel };
+}
 
 test("manifest includes Zotero-required add-on compatibility metadata", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "src", "manifest.json"), "utf8"));
@@ -18,6 +105,76 @@ test("manifest includes Zotero-required add-on compatibility metadata", () => {
   assert.equal(zotero?.strict_min_version, "9.0");
   assert.match(zotero?.strict_max_version, /^9\./);
   assert.match(zotero?.update_url, /^https:\/\//);
+});
+
+test("toolbar uses a native-size transparent context-painted SVG", () => {
+  const iconPath = path.join(ROOT, "src/chrome/content/icons/snowball.svg");
+  assert.ok(fs.existsSync(iconPath), "canonical toolbar SVG must exist");
+
+  const source = fs.readFileSync(iconPath, "utf8");
+  const root = XMLParser.parse(source).root;
+
+  assert.equal(root.name, "svg");
+  assert.equal(root.attributes.width, "20");
+  assert.equal(root.attributes.height, "20");
+  assert.equal(root.attributes.viewBox, "0 0 20 20");
+  assert.equal(root.attributes.fill, "none", "SVG canvas must be transparent");
+  assert.match(source, /fill="context-fill"/, "visible geometry must inherit Zotero's color");
+  assert.doesNotMatch(source, /\b(?:fill|stroke)="(?:#[0-9a-f]{3,8}|black|white|rgb\()/i);
+});
+
+test("toolbar CSS uses the canonical SVG with Zotero context paint at 20px", () => {
+  const source = fs.readFileSync(path.join(ROOT, "src/chrome/content/snowball.js"), "utf8");
+
+  assert.match(
+    source,
+    /list-style-image:\s*url\("chrome:\/\/snowball-sources\/content\/icons\/snowball\.svg"\)/
+  );
+  assert.match(source, /\.toolbarbutton-icon\s*{[^}]*\bwidth:\s*20px;/s);
+  assert.match(source, /\.toolbarbutton-icon\s*{[^}]*\bheight:\s*20px;/s);
+  assert.match(source, /-moz-context-properties:\s*fill,\s*fill-opacity;/);
+  assert.match(source, /\bfill:\s*currentColor;/);
+});
+
+test("manifest artwork has real alpha transparency at declared dimensions", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "src/manifest.json"), "utf8"));
+
+  for (const [declaredSize, relativePath] of Object.entries(manifest.icons)) {
+    const iconPath = path.join(ROOT, "src", relativePath);
+    assert.ok(fs.existsSync(iconPath), `manifest icon must resolve: ${relativePath}`);
+
+    const icon = inspectRGBA8PNG(iconPath);
+    assert.equal(icon.width, Number(declaredSize));
+    assert.equal(icon.height, Number(declaredSize));
+    assert.ok(icon.hasTransparentPixel, `${relativePath} must contain transparent pixels`);
+    assert.ok(icon.hasVisiblePixel, `${relativePath} must contain visible artwork`);
+  }
+});
+
+test("obsolete duplicated toolbar rasters and references are absent", () => {
+  const obsoleteAssets = [
+    "src/chrome/content/icons/toolbar-16.png",
+    "src/chrome/content/icons/toolbar-32.png",
+    "src/icons/toolbar-16.png",
+    "src/icons/toolbar-32.png"
+  ];
+
+  for (const relativePath of obsoleteAssets) {
+    assert.equal(
+      fs.existsSync(path.join(ROOT, relativePath)),
+      false,
+      `${relativePath} is obsolete`
+    );
+  }
+
+  for (const filePath of runtimeTextFiles(path.join(ROOT, "src"))) {
+    const runtimeSource = fs.readFileSync(filePath, "utf8");
+    assert.doesNotMatch(
+      runtimeSource,
+      /toolbar-(?:16|32)\.png/,
+      `${path.relative(ROOT, filePath)} references an obsolete toolbar raster`
+    );
+  }
 });
 
 test("review dialog declares Zotero-compatible window layout and stylesheets", () => {

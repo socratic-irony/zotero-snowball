@@ -136,11 +136,13 @@ var SnowballSourcesPlugin = class {
         style.id = "snowball-toolbar-style";
         style.textContent = `
           #snowball-toolbar-button {
-            list-style-image: url("chrome://snowball-sources/content/icons/toolbar-16.png");
+            list-style-image: url("chrome://snowball-sources/content/icons/snowball.svg");
           }
           #snowball-toolbar-button .toolbarbutton-icon {
-            width: 16px;
-            height: 16px;
+            width: 20px;
+            height: 20px;
+            -moz-context-properties: fill, fill-opacity;
+            fill: currentColor;
           }
         `;
         doc.documentElement.appendChild(style);
