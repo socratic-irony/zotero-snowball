@@ -31,7 +31,37 @@ var SnowballError = class extends Error {
     if (error instanceof SnowballError) return error;
     return new SnowballError(code, userMessage, { cause: error, context });
   }
+
+  static openAlexCredentials(context) {
+    return new SnowballError(
+      SnowballError.CODES.OPENALEX_CREDENTIALS,
+      "OpenAlex credentials were rejected. Check your API key in Preferences.",
+      { context }
+    );
+  }
+
+  static openAlexThrottled(context) {
+    return new SnowballError(
+      SnowballError.CODES.OPENALEX_THROTTLED,
+      "OpenAlex is still rate-limiting requests. Please try again later.",
+      { context }
+    );
+  }
+
+  static openAlexBudgetExhausted(context) {
+    return new SnowballError(
+      SnowballError.CODES.OPENALEX_BUDGET_EXHAUSTED,
+      "Your OpenAlex daily allowance is exhausted. Try again after it resets or use a different key.",
+      { context }
+    );
+  }
 };
+
+SnowballError.CODES = Object.freeze({
+  OPENALEX_CREDENTIALS: "OPENALEX_CREDENTIALS",
+  OPENALEX_THROTTLED: "OPENALEX_THROTTLED",
+  OPENALEX_BUDGET_EXHAUSTED: "OPENALEX_BUDGET_EXHAUSTED"
+});
 
 /**
  * Render an error for end-user display. Strips internals and scrubs secrets
