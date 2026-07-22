@@ -10,7 +10,28 @@
 
 ---
 
+## Execution baseline
+
+- **Completed:** Task 1 / S1 in commit `ef27ed438edf9e508c667f766b8bc0c8c7223079` (`fix(security): restrict automatic PDF downloads`). Do not reimplement or amend it.
+- **Verified at this baseline:** `npm run check` passes with 59/59 tests, ESLint, Prettier, TypeScript check, manifest JSON validation, and both XHTML documents valid.
+- **Remaining:** Tasks 2-9.
+
+## Parallel-agent handoff
+
+Create separate branches/worktrees from `ef27ed438edf9e508c667f766b8bc0c8c7223079`. Keep one commit per finding and do not let two agents edit the same worktree.
+
+- **Lane A:** Task 2 (S2). After it finishes, this lane may take Task 7 (S7).
+- **Lane B:** Task 3 (S3), then Task 4 (S4) sequentially because both change `openalex.js` and `tests/snowball-modules.test.js`.
+- **Lane C:** Task 5 (S5), then Task 6 (S6) sequentially because both change preferences XHTML and `tests/package.test.js`.
+- **Second wave:** Task 8 (S8) can run in any free lane; it is independent of S2-S7.
+
+Integrate by cherry-picking commits in finding order: S2, S3, S4, S5, S6, S7, S8. Resolve no conflict by silently dropping tests. After integration, run `npm run check`, review `git diff ef27ed4..HEAD`, then execute Task 9. Do not tag or push until the integrated verification and review are green.
+
+---
+
 ### Task 1: S1 — Restrict provider-supplied PDF downloads
+
+**Status:** Completed in `ef27ed438edf9e508c667f766b8bc0c8c7223079`. Retained below as the implemented specification and review reference.
 
 **Files:**
 
@@ -232,7 +253,7 @@ Pin official current commits verified on 2026-07-21:
 
 - `actions/checkout` v6.1.0: `d23441a48e516b6c34aea4fa41551a30e30af803`
 - `actions/setup-node` v6.5.0: `249970729cb0ef3589644e2896645e5dc5ba9c38`
-- `actions/upload-artifact` v7.0.0: `bbbca2ddaa5d8feaa63e36b76fdaad77386f024f`
+- `actions/upload-artifact` v7.0.1: `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`
 - `softprops/action-gh-release` v3.0.2: `3d0d9888cb7fd7b750713d6e236d1fcb99157228`
 
 Add weekly Dependabot entries for `github-actions` and `npm` at `/`.

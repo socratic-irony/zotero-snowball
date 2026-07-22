@@ -4,6 +4,8 @@
 **Target release:** 0.5.6
 **Source:** Security and Improvement Review findings S1-S8
 
+**Current status:** S1 is implemented in `ef27ed438edf9e508c667f766b8bc0c8c7223079`; S2-S8 and the release remain for parallel-agent execution under the implementation plan.
+
 ## Goal
 
 Resolve every finding from the security review without broad refactors, preserve Zotero 9 behavior, and publish the result as eight reviewable remediation commits plus one release commit.
