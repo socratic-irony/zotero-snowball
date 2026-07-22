@@ -227,7 +227,7 @@ test("preferences present one opt-in total limit and conceal API keys", () => {
   assert.match(source, /early-stop sample/i);
 
   for (const id of ["pref-openAlexAPIKey", "pref-semanticScholarAPIKey"]) {
-    const input = source.match(new RegExp("<html:input\\b[^>]*\\bid=\"" + id + "\"[^>]*/>"))?.[0];
+    const input = source.match(new RegExp('<html:input\\b[^>]*\\bid="' + id + '"[^>]*/>'))?.[0];
     assert.ok(input, id + " must be present");
     assert.match(input, /\btype="password"(?:\s|\/?>)/);
     assert.match(input, /\bautocomplete="off"(?:\s|\/?>)/);
@@ -238,10 +238,9 @@ test("the limit checkbox enables and disables its numeric control", () => {
   const checkbox = { checked: false };
   const limitInput = { disabled: false };
   /** @type {Map<string, { checked?: boolean, disabled?: boolean }>} */
-  const controls = new Map([
-    ["pref-limitResults", checkbox],
-    ["pref-maxCandidatesTotal", limitInput]
-  ]);
+  const controls = new Map();
+  controls.set("pref-limitResults", checkbox);
+  controls.set("pref-maxCandidatesTotal", limitInput);
   const context = vm.createContext({
     document: {
       getElementById(id) {
@@ -311,21 +310,18 @@ test("exhaustive mode ignores the numeric cap and remains distinguishable from S
 });
 
 test("stream progress reports unique candidates plus active and queued counts", async () => {
-  const result = await runDialog(
-    { apiKey: "user-key", limitResults: false },
-    [
-      { type: "candidate", candidate: { openAlexID: "W1" } },
-      { type: "candidate", candidate: { openAlexID: "W1" } },
-      {
-        type: "work-progress",
-        queued: 4,
-        active: 2,
-        pending: 6,
-        completed: 1,
-        seed: "seed label must not be displayed"
-      }
-    ]
-  );
+  const result = await runDialog({ apiKey: "user-key", limitResults: false }, [
+    { type: "candidate", candidate: { openAlexID: "W1" } },
+    { type: "candidate", candidate: { openAlexID: "W1" } },
+    {
+      type: "work-progress",
+      queued: 4,
+      active: 2,
+      pending: 6,
+      completed: 1,
+      seed: "seed label must not be displayed"
+    }
+  ]);
 
   assert.equal(result.loadingStates[0], true);
   assert.ok(result.progress.includes("1 unique candidate found — 2 active, 4 queued"));
@@ -334,10 +330,8 @@ test("stream progress reports unique candidates plus active and queued counts", 
 });
 
 function typedOpenAlexError(code, userMessage) {
-  const error = new Error(userMessage);
+  const error = Object.assign(new Error(userMessage), { code, userMessage });
   error.name = "SnowballError";
-  error.code = code;
-  error.userMessage = userMessage;
   return error;
 }
 
