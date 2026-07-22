@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added exhaustive citation snowballing as the default search mode, with an
+  opt-in early-stop limit that defaults to 1,000 unique candidates.
+- Added a 20-worker OpenAlex crawl queue with progressive work counts and
+  cancellation that preserves candidates already found.
+
+### Changed
+- Coordinated all OpenAlex request starts and retries through a shared rate
+  gate, including provider-wide `Retry-After` pauses and bounded exponential
+  backoff.
+- Require each user to enter their own OpenAlex API key; no project credential
+  is bundled in the public source or defaults.
+
 ## [0.5.6] – 2026-07-21
 
 ### Security
