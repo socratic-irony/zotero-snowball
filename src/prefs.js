@@ -14,11 +14,10 @@ pref("extensions.snowballSources.requestTimeoutMs", 30000);
 // runtime filter. 0 means show everything.
 pref("extensions.snowballSources.minCitedBy", 0);
 
-// Attach open-access PDFs to newly-added items when OpenAlex supplies a
-// `best_oa_location.pdf_url`. The download happens in the background after
-// the bulk-add transaction commits, so the dialog isn't blocked on
-// network I/O. Set to false to disable.
-pref("extensions.snowballSources.downloadPDFs", true);
+// Opt in to attaching open-access PDFs when OpenAlex supplies a
+// `best_oa_location.pdf_url`. Downloads contact third-party publisher hosts
+// after the bulk-add transaction commits.
+pref("extensions.snowballSources.downloadPDFs", false);
 
 // Persisted dialog UI state (window size + splitter width). Stored as JSON.
 pref("extensions.snowballSources.uiState", "");

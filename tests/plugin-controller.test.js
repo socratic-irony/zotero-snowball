@@ -6,7 +6,7 @@ const vm = require("node:vm");
 
 const ROOT = path.resolve(__dirname, "..");
 
-function loadController(extraZotero = {}) {
+function loadController(extraZotero = {}, extraContext = {}) {
   const registered = [];
   const unregistered = [];
   const openedDialogs = [];
@@ -39,7 +39,8 @@ function loadController(extraZotero = {}) {
         }
       },
       ...extraZotero
-    }
+    },
+    ...extraContext
   });
 
   vm.runInContext(
@@ -175,4 +176,38 @@ test("review dialog opens as registered chrome content with explicit dimensions"
   assert.match(openedDialogs[0][2], /dialog=no/);
   assert.match(openedDialogs[0][2], /width=\d+/);
   assert.match(openedDialogs[0][2], /height=\d+/);
+});
+
+test("PDF downloads require a stored boolean true preference", async () => {
+  /** @type {boolean | string} */
+  let storedPreference = "false";
+  const downloadOptions = [];
+  const { context } = loadController(
+    {
+      Prefs: {
+        get() {
+          return storedPreference;
+        }
+      }
+    },
+    {
+      SnowballZoteroItems: {
+        async addCandidates(_candidates, _target, options) {
+          downloadOptions.push(options.downloadPDFs);
+          return {};
+        }
+      }
+    }
+  );
+  const plugin = new context.SnowballSourcesPlugin({
+    id: "snowball-sources@socratic-irony.github.io",
+    version: "0.1.2",
+    rootURI: "jar:file:///snowball.xpi!/"
+  });
+
+  await plugin.addCandidatesToZotero([], { libraryID: 1 });
+  storedPreference = true;
+  await plugin.addCandidatesToZotero([], { libraryID: 1 });
+
+  assert.deepEqual(downloadOptions, [false, true]);
 });

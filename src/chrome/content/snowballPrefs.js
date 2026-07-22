@@ -12,7 +12,7 @@ var SnowballPrefs = {
     includeForward: { type: "boolean", default: true },
     includeBackward: { type: "boolean", default: true },
     skipAlreadyInLibrary: { type: "boolean", default: true },
-    downloadPDFs: { type: "boolean", default: true },
+    downloadPDFs: { type: "boolean", default: false },
     maxSeeds: { type: "number", default: 50, min: 1, max: 500 },
     maxForwardPerSeed: { type: "number", default: 100, min: 0, max: 1000 },
     maxBackwardPerSeed: { type: "number", default: 100, min: 0, max: 1000 },

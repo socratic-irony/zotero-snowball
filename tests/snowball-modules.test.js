@@ -58,6 +58,46 @@ class FakeZoteroItem {
   }
 }
 
+function loadZoteroItemsForImports() {
+  const imports = [];
+  let nextItemID = 1;
+
+  class SavedZoteroItem extends FakeZoteroItem {
+    async save() {
+      if (!this.id) this.id = nextItemID++;
+      return this.id;
+    }
+  }
+
+  const Zotero = {
+    debug() {},
+    Item: SavedZoteroItem,
+    DB: {
+      async executeTransaction(callback) {
+        await callback();
+      }
+    },
+    Attachments: {
+      importFromURL(options) {
+        imports.push(options);
+        return Promise.resolve();
+      }
+    }
+  };
+  const { SnowballZoteroItems } = loadModules(["zoteroItems.js"], { Zotero });
+
+  return { SnowballZoteroItems, imports };
+}
+
+function pdfCandidate(pdfURL) {
+  return {
+    type: "article",
+    title: "Candidate with PDF",
+    direction: "forward",
+    pdfURL
+  };
+}
+
 test("utility helpers chunk, normalize text, and format scores", () => {
   const { SnowballUtil } = loadModules(["util.js"]);
 
@@ -102,6 +142,67 @@ test("Zotero item helpers normalize seeds and map OpenAlex candidates", () => {
   assert.deepEqual(plain(item.creators), [
     { firstName: "Jane", lastName: "Smith", creatorType: "author" }
   ]);
+});
+
+test("Zotero item imports omit PDF downloads when options are omitted", async () => {
+  const { SnowballZoteroItems, imports } = loadZoteroItemsForImports();
+
+  const result = await SnowballZoteroItems.addCandidates(
+    [pdfCandidate("https://publisher.example.org/paper.pdf")],
+    { libraryID: 7 }
+  );
+
+  assert.equal(result.added.length, 1);
+  assert.equal(result.failed.length, 0);
+  assert.equal(result.downloadsStarted, 0);
+  assert.deepEqual(imports, []);
+});
+
+test("Zotero item imports download a safe PDF only when explicitly enabled", async () => {
+  const { SnowballZoteroItems, imports } = loadZoteroItemsForImports();
+
+  const result = await SnowballZoteroItems.addCandidates(
+    [pdfCandidate("https://Publisher.Example.org:443/paper.pdf")],
+    { libraryID: 7 },
+    { downloadPDFs: true }
+  );
+
+  assert.equal(result.added.length, 1);
+  assert.equal(result.failed.length, 0);
+  assert.equal(result.downloadsStarted, 1);
+  assert.equal(imports.length, 1);
+  assert.equal(imports[0].url, "https://publisher.example.org/paper.pdf");
+  assert.equal(imports[0].parentItemID, 1);
+});
+
+test("Zotero item imports do not treat truthy PDF options as explicit consent", async () => {
+  const { SnowballZoteroItems, imports } = loadZoteroItemsForImports();
+
+  const result = await SnowballZoteroItems.addCandidates(
+    [pdfCandidate("https://publisher.example.org/paper.pdf")],
+    { libraryID: 7 },
+    { downloadPDFs: "true" }
+  );
+
+  assert.equal(result.added.length, 1);
+  assert.equal(result.failed.length, 0);
+  assert.equal(result.downloadsStarted, 0);
+  assert.deepEqual(imports, []);
+});
+
+test("Zotero item imports skip unsafe PDFs without rolling back the parent item", async () => {
+  const { SnowballZoteroItems, imports } = loadZoteroItemsForImports();
+
+  const result = await SnowballZoteroItems.addCandidates(
+    [pdfCandidate("https://127.1/paper.pdf")],
+    { libraryID: 7 },
+    { downloadPDFs: true }
+  );
+
+  assert.equal(result.added.length, 1);
+  assert.equal(result.failed.length, 0);
+  assert.equal(result.downloadsStarted, 0);
+  assert.deepEqual(imports, []);
 });
 
 test("OpenAlex provider normalizes, reconstructs, and deduplicates candidates", () => {

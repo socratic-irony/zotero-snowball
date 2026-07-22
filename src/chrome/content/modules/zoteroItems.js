@@ -93,7 +93,7 @@ var SnowballZoteroItems = {
    * @param {object[]} candidates
    * @param {object}   target  { libraryID, collectionID? }
    * @param {object}   [opts]
-   * @param {boolean}  [opts.downloadPDFs=true]  Kick off background PDF
+   * @param {boolean}  [opts.downloadPDFs=false]  Opt in to background PDF
    *        downloads for any candidate carrying `pdfURL`. Downloads run
    *        AFTER the DB transaction commits so they don't deadlock the
    *        write path or block the bulk-add.
@@ -101,7 +101,7 @@ var SnowballZoteroItems = {
    * @returns {Promise<{added, skipped, failed, downloadsStarted}>}
    */
   async addCandidates(candidates, target, opts = {}) {
-    const downloadPDFs = opts?.downloadPDFs !== false;
+    const downloadPDFs = opts?.downloadPDFs === true;
 
     const added = [];
     const skipped = [];
@@ -147,13 +147,10 @@ var SnowballZoteroItems = {
           await item.save();
           added.push(candidate);
 
-          // Queue a PDF download if OpenAlex gave us an OA URL. Filtered
-          // through safeURL so we never queue a javascript:/data: link.
-          if (downloadPDFs) {
-            const pdfURL = this._safePDFURL(candidate.pdfURL);
-            if (pdfURL && item.id) {
-              pdfTargets.push({ candidate, itemID: item.id, pdfURL });
-            }
+          // Hold the provider URL until after commit. The final attachment
+          // boundary validates it immediately before handing it to Zotero.
+          if (downloadPDFs && candidate.pdfURL && item.id) {
+            pdfTargets.push({ candidate, itemID: item.id, pdfURL: candidate.pdfURL });
           }
         } catch (error) {
           failed.push({
@@ -180,22 +177,85 @@ var SnowballZoteroItems = {
     // Fire PDF downloads OUTSIDE the transaction so they don't deadlock
     // Zotero's write path. Fire-and-forget: the user sees a count in the
     // success toast and Zotero's own notifier shows download progress.
-    if (pdfTargets.length) {
-      this._kickOffPDFDownloads(pdfTargets, target.libraryID);
-    }
+    const downloadsStarted = pdfTargets.length
+      ? this._kickOffPDFDownloads(pdfTargets, target.libraryID)
+      : 0;
 
     return {
       added,
       skipped,
       failed,
-      downloadsStarted: pdfTargets.length
+      downloadsStarted
     };
   },
 
-  _safePDFURL(value) {
-    const s = String(value || "").trim();
-    if (!s) return "";
-    return /^https?:\/\//i.test(s) ? s : "";
+  safeAttachmentURL(value) {
+    try {
+      const input = String(value || "").trim();
+      const url = new URL(input);
+      if (url.protocol !== "https:" || url.username || url.password) return "";
+
+      const rawAuthority = input.match(/^https:[\\/]*([^\\/?#]*)/i)?.[1] || "";
+      const rawHostPort = rawAuthority.slice(rawAuthority.lastIndexOf("@") + 1);
+      const rawInputHostname = rawHostPort.startsWith("[")
+        ? rawHostPort.slice(0, rawHostPort.indexOf("]") + 1)
+        : rawHostPort.replace(/:\d*$/, "");
+      if (rawInputHostname.endsWith(".")) return "";
+
+      const rawHostname = url.hostname.toLowerCase();
+      const isIPv6 = rawHostname.startsWith("[") && rawHostname.endsWith("]");
+      if (!isIPv6 && rawHostname.endsWith(".")) return "";
+
+      const hostname = isIPv6 ? rawHostname.slice(1, -1) : rawHostname;
+      if (!hostname) return "";
+
+      if (hostname === "localhost" || hostname.endsWith(".localhost")) return "";
+      if (this._isNonPublicIPv4(hostname) || this._isNonPublicIPv6(hostname)) return "";
+
+      return url.href;
+    } catch (_) {
+      return "";
+    }
+  },
+
+  _isNonPublicIPv4(hostname) {
+    if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return false;
+
+    const octets = hostname.split(".").map(Number);
+    if (octets.some((octet) => octet < 0 || octet > 255)) return true;
+    const [a, b, c] = octets;
+
+    return (
+      a === 0 ||
+      a === 10 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 0 && c === 0) ||
+      (a === 192 && b === 0 && c === 2) ||
+      (a === 192 && b === 88 && c === 99) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      (a === 198 && b === 51 && c === 100) ||
+      (a === 203 && b === 0 && c === 113) ||
+      a >= 224
+    );
+  },
+
+  _isNonPublicIPv6(hostname) {
+    if (!hostname.includes(":")) return false;
+
+    const address = hostname.toLowerCase();
+    const firstHextet = address.split(":").find(Boolean) || "";
+    return (
+      address === "::" ||
+      address === "::1" ||
+      address.startsWith("::ffff:") ||
+      /^f[cd][0-9a-f]{2}$/.test(firstHextet) ||
+      /^fe[89ab][0-9a-f]$/.test(firstHextet) ||
+      /^ff[0-9a-f]{2}$/.test(firstHextet)
+    );
   },
 
   /**
@@ -206,7 +266,7 @@ var SnowballZoteroItems = {
    * doesn't appear.
    */
   _kickOffPDFDownloads(targets, libraryID) {
-    if (!targets?.length) return;
+    if (!targets?.length) return 0;
     if (!Zotero?.Attachments?.importFromURL) {
       try {
         if (typeof SnowballLog !== "undefined") {
@@ -217,14 +277,18 @@ var SnowballZoteroItems = {
       } catch (_) {
         /* ignore */
       }
-      return;
+      return 0;
     }
+    let downloadsStarted = 0;
     for (const t of targets) {
+      const pdfURL = this.safeAttachmentURL(t.pdfURL);
+      if (!pdfURL) continue;
+
       // Promise intentionally unawaited.
       Zotero.Attachments.importFromURL({
         libraryID,
         parentItemID: t.itemID,
-        url: t.pdfURL,
+        url: pdfURL,
         title: "Full Text PDF",
         contentType: "application/pdf"
       }).catch((error) => {
@@ -232,7 +296,7 @@ var SnowballZoteroItems = {
           if (typeof SnowballLog !== "undefined") {
             SnowballLog.warn("PDF download failed", {
               title: String(t.candidate?.title || "").slice(0, 120),
-              url: t.pdfURL,
+              url: pdfURL,
               error: SnowballLog.formatError(error)
             });
           }
@@ -240,7 +304,9 @@ var SnowballZoteroItems = {
           /* ignore */
         }
       });
+      downloadsStarted += 1;
     }
+    return downloadsStarted;
   },
 
   // Where each item type stores the candidate's "venue" string. Anything not

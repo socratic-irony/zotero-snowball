@@ -30,6 +30,10 @@ function loadScripts(names, extraContext = {}) {
   return context;
 }
 
+function readProjectFile(relativePath) {
+  return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
+}
+
 test("SnowballLog.scrub redacts api_key query parameters", () => {
   const ctx = loadScripts(["log.js"]);
   const url = "https://api.openalex.org/works?filter=cites:W123&api_key=SECRET_TOKEN_123";
@@ -93,6 +97,85 @@ test("SnowballHTTP.assertSafeURL accepts allowlisted hosts", () => {
     const url = ctx.SnowballHTTP.assertSafeURL(`https://${host}/works`);
     assert.equal(url.hostname, host);
   }
+});
+
+test("SnowballZoteroItems.safeAttachmentURL canonicalizes public HTTPS URLs", () => {
+  const ctx = loadScripts(["zoteroItems.js"]);
+  const input = "https://Publisher.Example.org:443/papers/a%20b.pdf?download=1#page=2";
+
+  assert.equal(ctx.SnowballZoteroItems.safeAttachmentURL(input), new URL(input).href);
+});
+
+test("SnowballZoteroItems.safeAttachmentURL rejects unsafe attachment destinations", () => {
+  const ctx = loadScripts(["zoteroItems.js"]);
+  const unsafeURLs = [
+    "http://publisher.example.org/paper.pdf",
+    "not a URL",
+    "https://reader:secret@publisher.example.org/paper.pdf",
+    "https://localhost/paper.pdf",
+    "https://localhost./paper.pdf",
+    "https://pdf.localhost/paper.pdf",
+    "https://pdf.localhost./paper.pdf",
+    "https://publisher.example.org./paper.pdf",
+    "https://8.8.8.8./paper.pdf",
+    "https://127.1/paper.pdf",
+    "https://0x7f000001/paper.pdf",
+    "https://10.0.0.1/paper.pdf",
+    "https://169.254.1.1/paper.pdf",
+    "https://172.16.0.1/paper.pdf",
+    "https://192.168.1.1/paper.pdf",
+    "https://100.64.0.1/paper.pdf",
+    "https://192.0.2.1/paper.pdf",
+    "https://198.18.0.1/paper.pdf",
+    "https://198.51.100.1/paper.pdf",
+    "https://203.0.113.1/paper.pdf",
+    "https://0.0.0.0/paper.pdf",
+    "https://224.0.0.1/paper.pdf",
+    "https://[::1]/paper.pdf",
+    "https://[::]/paper.pdf",
+    "https://[fc00::1]/paper.pdf",
+    "https://[fd00::1]/paper.pdf",
+    "https://[fe80::1]/paper.pdf",
+    "https://[::ffff:127.0.0.1]/paper.pdf",
+    "https://[::ffff:8.8.8.8]/paper.pdf"
+  ];
+
+  for (const url of unsafeURLs) {
+    assert.equal(ctx.SnowballZoteroItems.safeAttachmentURL(url), "", url);
+  }
+});
+
+test("automatic PDF downloads fail closed at all four default layers", () => {
+  const prefDefaults = new Map();
+  vm.runInNewContext(readProjectFile("src/prefs.js"), {
+    pref(name, value) {
+      prefDefaults.set(name, value);
+    }
+  });
+
+  const prefsContext = vm.createContext({});
+  vm.runInContext(readProjectFile("src/chrome/content/snowballPrefs.js"), prefsContext);
+
+  const controllerSource = readProjectFile("src/chrome/content/snowball.js");
+  const itemSource = readProjectFile("src/chrome/content/modules/zoteroItems.js");
+
+  assert.deepEqual(
+    {
+      installDefault: prefDefaults.get("extensions.snowballSources.downloadPDFs"),
+      schemaDefault: prefsContext.SnowballPrefs.schema.downloadPDFs.default,
+      controllerRequiresExplicitTrue:
+        /downloadPDFs:\s*this\.pref\("downloadPDFs",\s*false\)\s*===\s*true/.test(controllerSource),
+      itemLayerRequiresExplicitTrue: /const downloadPDFs = opts\?\.downloadPDFs === true;/.test(
+        itemSource
+      )
+    },
+    {
+      installDefault: false,
+      schemaDefault: false,
+      controllerRequiresExplicitTrue: true,
+      itemLayerRequiresExplicitTrue: true
+    }
+  );
 });
 
 test("SnowballError.wrap preserves AbortError without rewrapping", () => {

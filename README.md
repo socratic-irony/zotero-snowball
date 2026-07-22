@@ -19,8 +19,8 @@ Find one-hop **backward references** and **forward citations** for the items alr
 - **Bulk select / deselect visible**, indeterminate header checkbox, live selection count, primary "Add Selected to Zotero" button.
 - **Per-candidate add isolation** — a single bad item never rolls back the whole batch; partial-success counts (added / skipped / failed) are surfaced to the user with up to 3 reasons.
 - **Resilient HTTP**: per-request timeout, exponential backoff with jitter on `408/425/429/500/502/503/504` and transient network errors, `Retry-After` honored.
-- **Cybersecurity hardened**: HTTPS-only host allowlist enforced before any socket opens, `javascript:` / `data:` / `file:` URLs from API responses dropped, API keys redacted from every log line, no `innerHTML` anywhere.
-- **No telemetry, no third-party SDKs, no remote logging.** The plugin only contacts the citation provider hosts you configure.
+- **Cybersecurity hardened**: citation API calls use an HTTPS-only host allowlist, optional PDF attachment URLs are validated before import, API keys are redacted from logs, and no `innerHTML` is used.
+- **No telemetry, no third-party SDKs, no remote logging.** Citation searches contact only configured provider hosts; opt-in PDF downloads also contact third-party publisher hosts.
 
 ---
 
@@ -94,6 +94,7 @@ Added items are tagged automatically:
 | `extensions.snowballSources.includeForward`        | `true`  | Fetch papers that **cite** each seed.                          |
 | `extensions.snowballSources.includeBackward`       | `true`  | Fetch papers each seed **references**.                         |
 | `extensions.snowballSources.skipAlreadyInLibrary`  | `true`  | Uncheck candidates already in library by default.              |
+| `extensions.snowballSources.downloadPDFs`          | `false` | Opt in to PDF downloads from third-party publisher hosts.      |
 | `extensions.snowballSources.maxSeeds`              | `50`    | 1–500.                                                         |
 | `extensions.snowballSources.maxForwardPerSeed`     | `100`   | 0–1000.                                                        |
 | `extensions.snowballSources.maxBackwardPerSeed`    | `100`   | 0–1000.                                                        |
@@ -112,10 +113,11 @@ API keys are stored in Zotero's prefs file like any other Zotero pref (plain tex
 
 This is meant to ship to scientists' machines. The plugin's posture:
 
-- **Outbound network egress is allowlisted at the HTTP layer.** Only `api.openalex.org` and (when a key is set) `api.semanticscholar.org` can be contacted. Any other URL — including ones that arrive in API responses — throws `HOST_NOT_ALLOWED` before a socket is opened. Source: [`modules/http.js`](src/chrome/content/modules/http.js).
-- **HTTPS-only.** `http://`, `javascript:`, `data:`, `file:`, and any other scheme are rejected by the same wrapper.
-- **Cookies are never sent.** All requests use `credentials: "omit"`.
-- **No telemetry.** No analytics, no crash reporting, no usage pings, no remote configuration. The only outbound traffic is the citation queries you initiate.
+- **Citation API egress is allowlisted at the HTTP layer.** Citation requests can contact only `api.openalex.org` and (when a key is set) `api.semanticscholar.org`. Other citation API destinations throw `HOST_NOT_ALLOWED` before a socket is opened. Source: [`modules/http.js`](src/chrome/content/modules/http.js).
+- **PDF downloads are opt-in.** When enabled, provider-supplied PDF URLs may contact third-party publisher hosts outside the citation API allowlist. The initial URL must be absolute HTTPS without credentials, localhost names, or non-public IP literals. Validation happens immediately before Zotero receives the URL; it does not resolve DNS or control redirects Zotero or the publisher may perform.
+- **HTTPS-only initial requests.** `http://`, `javascript:`, `data:`, `file:`, and other schemes are rejected for citation requests and PDF attachment imports.
+- **Citation API cookies are never sent.** Citation API requests use `credentials: "omit"`; Zotero handles attachment retrieval.
+- **No telemetry.** No analytics, crash reporting, usage pings, or remote configuration. Outbound traffic consists of citation queries you initiate and any PDF downloads you explicitly enable.
 - **No third-party SDKs.** Zero npm runtime dependencies.
 - **No `innerHTML`.** Every DOM node is built with `createElementNS` + `textContent`. A test guards against regressions: [`tests/package.test.js`](tests/package.test.js).
 - **Provider URLs sanitized before render.** Candidate URLs from OpenAlex are dropped unless they begin with `http(s)://`, so a `javascript:` URL coming back from the API can't be saved into a Zotero item or rendered as a clickable link.

@@ -461,7 +461,7 @@ var SnowballSourcesPlugin = class {
 
   async addCandidatesToZotero(candidates, target) {
     return SnowballZoteroItems.addCandidates(candidates, target, {
-      downloadPDFs: this.prefBool("downloadPDFs", true)
+      downloadPDFs: this.pref("downloadPDFs", false) === true
     });
   }
 
