@@ -91,18 +91,18 @@ Added items are tagged automatically:
 
 `Tools → Snowball Sources Preferences…`
 
-| Pref name                                          | Default | Range / notes                                                         |
-| -------------------------------------------------- | ------- | --------------------------------------------------------------------- |
-| `extensions.snowballSources.openAlexAPIKey`        | `""`    | Required. Enter your own key; no project key is bundled.              |
-| `extensions.snowballSources.semanticScholarAPIKey` | `""`    | Optional. Reserved for future enrichment; not yet called.             |
+| Pref name                                          | Default | Range / notes                                                          |
+| -------------------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `extensions.snowballSources.openAlexAPIKey`        | `""`    | Required. Enter your own key; no project key is bundled.               |
+| `extensions.snowballSources.semanticScholarAPIKey` | `""`    | Optional. Reserved for future enrichment; not yet called.              |
 | `extensions.snowballSources.limitResults`          | `false` | Exhaustive by default; enable to stop early at the total-result limit. |
-| `extensions.snowballSources.includeForward`        | `true`  | Fetch papers that **cite** each seed.                                 |
-| `extensions.snowballSources.includeBackward`       | `true`  | Fetch papers each seed **references**.                                |
-| `extensions.snowballSources.skipAlreadyInLibrary`  | `true`  | Uncheck candidates already in library by default.                     |
-| `extensions.snowballSources.downloadPDFs`          | `false` | Opt in to PDF downloads from third-party publisher hosts.             |
-| `extensions.snowballSources.maxSeeds`              | `50`    | 1–500.                                                                |
-| `extensions.snowballSources.maxCandidatesTotal`    | `1000`  | 1–10000; used only when `limitResults` is enabled.                    |
-| `extensions.snowballSources.requestTimeoutMs`      | `30000` | 1000–120000.                                                          |
+| `extensions.snowballSources.includeForward`        | `true`  | Fetch papers that **cite** each seed.                                  |
+| `extensions.snowballSources.includeBackward`       | `true`  | Fetch papers each seed **references**.                                 |
+| `extensions.snowballSources.skipAlreadyInLibrary`  | `true`  | Uncheck candidates already in library by default.                      |
+| `extensions.snowballSources.downloadPDFs`          | `false` | Opt in to PDF downloads from third-party publisher hosts.              |
+| `extensions.snowballSources.maxSeeds`              | `50`    | 1–500.                                                                 |
+| `extensions.snowballSources.maxCandidatesTotal`    | `1000`  | 1–10000; used only when `limitResults` is enabled.                     |
+| `extensions.snowballSources.requestTimeoutMs`      | `30000` | 1000–120000.                                                           |
 
 Out-of-range values are clamped on save and you'll be shown a confirmation dialog listing what was adjusted.
 

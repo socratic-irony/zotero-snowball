@@ -338,9 +338,7 @@ var SnowballSourcesPlugin = class {
     try {
       const apiKey = this.prefStr("openAlexAPIKey", "").trim();
       if (!apiKey) {
-        this.alert(
-          "Enter your OpenAlex API key in Snowball Sources Preferences before searching."
-        );
+        this.alert("Enter your OpenAlex API key in Snowball Sources Preferences before searching.");
         return;
       }
 

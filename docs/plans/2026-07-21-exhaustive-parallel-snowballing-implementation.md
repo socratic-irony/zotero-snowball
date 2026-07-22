@@ -15,6 +15,7 @@
 **Owner:** Luna/max thread `search-mode-credentials`
 
 **Files:**
+
 - Modify: `src/prefs.js:1-11`
 - Modify: `src/chrome/content/snowball.js:330-404`
 - Modify: `src/chrome/content/snowballPrefs.js:6-30`
@@ -105,6 +106,7 @@ git commit -m "feat: make exhaustive snowballing the default"
 **Owner:** Luna/max thread `parallel-crawler`
 
 **Files:**
+
 - Modify: `src/chrome/content/modules/openalex.js:3-540`
 - Create: `tests/openalex-concurrency.test.js`
 
@@ -145,7 +147,9 @@ class OpenAlexAsyncQueue {
   close() {}
   fail(error) {}
   async next() {}
-  [Symbol.asyncIterator]() { return this; }
+  [Symbol.asyncIterator]() {
+    return this;
+  }
 }
 ```
 
@@ -189,6 +193,7 @@ git commit -m "feat: crawl OpenAlex with twenty workers"
 **Owner:** Luna/max thread `rate-limit-retries`
 
 **Files:**
+
 - Modify: `src/chrome/content/modules/http.js:18-250`
 - Modify: `src/chrome/content/modules/errors.js:1-140`
 - Create: `tests/http-rate-limit.test.js`
@@ -252,6 +257,7 @@ git commit -m "feat: coordinate OpenAlex rate limiting"
 **Owner:** Luna/max thread `credential-history-audit`
 
 **Files:**
+
 - Create when clean: `docs/security/openalex-credential-history-audit-2026-07-21.md`
 
 **Step 1: Refresh public refs read-only**
@@ -296,6 +302,7 @@ git commit -m "docs: record OpenAlex credential history audit"
 **Owner:** Primary thread after the four Luna/max reports
 
 **Files:**
+
 - Modify as required by integration findings
 - Modify: `CHANGELOG.md`
 - Verify: all files changed by Tasks 1-4
