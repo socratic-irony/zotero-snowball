@@ -299,6 +299,36 @@ test("OpenAlex abstract reconstruction ignores invalid positions and bounds prov
   assert.equal(provider.reconstructAbstract(budgetedIndex), "token9999");
 });
 
+test("OpenAlex author extraction caps malformed provider data", () => {
+  const { OpenAlexProvider } = loadModules(["util.js", "openalex.js"]);
+  const oversizedName = `${"A".repeat(400)} ${"B".repeat(400)}`;
+  const authorships = [
+    { author: { display_name: "Jane Q Smith" } },
+    null,
+    { author: {} },
+    { author: { display_name: "Prince" } }
+  ];
+
+  for (let i = authorships.length; i < 105; i++) {
+    authorships.push({ author: { display_name: oversizedName } });
+  }
+
+  const authors = new OpenAlexProvider({}).extractAuthors(authorships);
+
+  assert.equal(authors.length, 100);
+  assert.deepEqual(plain(authors[0]), {
+    name: "Jane Q Smith",
+    firstName: "Jane Q",
+    lastName: "Smith"
+  });
+  assert.deepEqual(plain(authors[3]), { name: "Prince", firstName: "", lastName: "Prince" });
+  for (const author of authors) {
+    assert.ok(author.name.length <= 256);
+    assert.ok(author.firstName.length <= 256);
+    assert.ok(author.lastName.length <= 256);
+  }
+});
+
 test("ranking prefers overlapping new candidates and penalizes existing duplicates", () => {
   // ranking.js depends on SnowballUtil for trigrams/jaccard/normalizeAuthorName
   const { SnowballRanking } = loadModules(["util.js", "ranking.js"]);

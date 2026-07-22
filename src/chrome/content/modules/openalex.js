@@ -4,6 +4,8 @@ const OPENALEX_MAX_ABSTRACT_POSITION = 10_000;
 const OPENALEX_MAX_ABSTRACT_TOKEN_LENGTH = 256;
 const OPENALEX_MAX_ABSTRACT_ENTRIES = 10_000;
 const OPENALEX_MAX_ABSTRACT_LENGTH = 8_000;
+const OPENALEX_MAX_AUTHORS = 100;
+const OPENALEX_MAX_AUTHOR_NAME_LENGTH = 256;
 
 var OpenAlexProvider = class {
   static clampInt(value, min, max, fallback) {
@@ -320,14 +322,25 @@ var OpenAlexProvider = class {
   }
 
   extractAuthors(authorships) {
-    return authorships.map((authorship) => {
-      const display = authorship.author?.display_name || "";
+    if (!Array.isArray(authorships)) return [];
+
+    return authorships.slice(0, OPENALEX_MAX_AUTHORS).map((authorship) => {
+      const display = OpenAlexProvider.clampStr(
+        authorship?.author?.display_name || "",
+        OPENALEX_MAX_AUTHOR_NAME_LENGTH
+      );
       const parts = display.trim().split(/\s+/).filter(Boolean);
 
       return {
         name: display,
-        firstName: parts.length > 1 ? parts.slice(0, -1).join(" ") : "",
-        lastName: parts.length > 1 ? parts[parts.length - 1] : display
+        firstName: OpenAlexProvider.clampStr(
+          parts.length > 1 ? parts.slice(0, -1).join(" ") : "",
+          OPENALEX_MAX_AUTHOR_NAME_LENGTH
+        ),
+        lastName: OpenAlexProvider.clampStr(
+          parts.length > 1 ? parts[parts.length - 1] : display,
+          OPENALEX_MAX_AUTHOR_NAME_LENGTH
+        )
       };
     });
   }
