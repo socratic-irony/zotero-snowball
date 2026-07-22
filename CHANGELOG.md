@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] – 2026-07-21
+
+### Security
+- Made automatic PDF retrieval opt-in and restricted attachment imports to
+  canonical public HTTPS destinations.
+- Reject provider redirects at the HTTP boundary instead of following them.
+- Bound OpenAlex abstract reconstruction, author counts, and provider-supplied
+  text lengths.
+- Concealed API keys in the preferences UI and disabled field autocomplete.
+- Replaced inline chrome event handlers with explicit lifecycle and control
+  listeners.
+- Recursively redact secret-bearing structured log data with cycle and depth
+  guards.
+- Pinned GitHub Actions dependencies to reviewed commit SHAs and enabled weekly
+  Dependabot checks for Actions and npm.
+
 ## [0.5.5] – 2026-05-10
 
 ### Fixed (dark mode audit, round 2)
