@@ -95,3 +95,57 @@ test("bump-version.sh is executable and refuses non-monotonic targets", () => {
     `expected refusal to downgrade to 0.0.0 from ${pkgVersion}`
   );
 });
+
+test("actions are pinned to full lowercase SHAs with version comments", () => {
+  const workflows = [".github/workflows/ci.yml", ".github/workflows/release.yml"];
+  const expected = new Map([
+    ["actions/checkout", "d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0"],
+    ["actions/setup-node", "249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0"],
+    ["actions/upload-artifact", "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"],
+    ["softprops/action-gh-release", "3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2"]
+  ]);
+  const references = [];
+
+  for (const workflow of workflows) {
+    const text = fs.readFileSync(path.join(ROOT, workflow), "utf8");
+    for (const line of text.split("\n")) {
+      if (!/\buses:\s*/.test(line)) continue;
+      const match = line.match(/^\s+uses:\s+([^\s]+)(?:\s+#\s+(.+?))?\s*$/);
+      assert.ok(match, `${workflow} has an invalid uses line: ${line}`);
+      const [owner, action] = match[1].split("@");
+      assert.match(owner, /^[\w.-]+\/[\w.-]+$/, `${workflow} has an invalid action name`);
+      assert.match(action, /^[0-9a-f]{40}$/, `${workflow} has a floating or malformed action ref`);
+      assert.match(
+        match[2] ?? "",
+        /^v\d+\.\d+\.\d+$/,
+        `${workflow} action ref is missing a version comment`
+      );
+      references.push(`${owner}@${action} # ${match[2]}`);
+    }
+  }
+
+  assert.ok(references.length > 0, "expected at least one external action reference");
+  for (const reference of references) {
+    const [owner] = reference.split("@");
+    assert.equal(reference, `${owner}@${expected.get(owner)}`, `unexpected pin for ${owner}`);
+  }
+  assert.deepEqual(
+    new Set(references.map((reference) => reference.split("@")[0])),
+    new Set(expected.keys())
+  );
+});
+
+test("Dependabot has weekly actions and npm update entries", () => {
+  const configPath = path.join(ROOT, ".github/dependabot.yml");
+  assert.ok(fs.existsSync(configPath), "Dependabot configuration is missing");
+  const text = fs.readFileSync(configPath, "utf8");
+  for (const ecosystem of ["github-actions", "npm"]) {
+    assert.match(
+      text,
+      new RegExp(
+        `- package-ecosystem:\\s+${ecosystem}\\n\\s+directory:\\s+\\/\\n\\s+schedule:\\n\\s+interval:\\s+weekly`
+      ),
+      `Dependabot must check ${ecosystem} weekly from /`
+    );
+  }
+});
