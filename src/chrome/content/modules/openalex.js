@@ -9,13 +9,43 @@ const OPENALEX_MAX_AUTHOR_NAME_LENGTH = 256;
 const OPENALEX_BACKWARD_CHUNK_SIZE = 100;
 const OPENALEX_MAX_WORKERS = 20;
 const OPENALEX_MAX_SEED_LABEL_LENGTH = 160;
+const OPENALEX_EVENT_BUFFER_SIZE = 100;
+const OPENALEX_TERMINAL_ERROR_CODES = new Set([
+  "OPENALEX_CREDENTIALS",
+  "OPENALEX_BUDGET_EXHAUSTED",
+  "OPENALEX_THROTTLED"
+]);
 
 var OpenAlexAsyncQueue = class {
-  constructor() {
+  constructor(capacity = Number.POSITIVE_INFINITY) {
+    const numericCapacity = Number(capacity);
+    this.capacity = Number.isFinite(numericCapacity)
+      ? Math.max(0, Math.trunc(numericCapacity))
+      : Number.POSITIVE_INFINITY;
     this.values = [];
     this.readers = [];
+    this.writers = [];
     this.closed = false;
     this.error = null;
+  }
+
+  drainWriters() {
+    while (
+      !this.closed &&
+      !this.error &&
+      this.writers.length > 0 &&
+      this.values.length < this.capacity
+    ) {
+      const writer = this.writers.shift();
+      this.values.push(writer.value);
+      writer.resolve(true);
+    }
+  }
+
+  settleWriters() {
+    for (const writer of this.writers.splice(0)) {
+      writer.resolve(false);
+    }
   }
 
   push(value) {
@@ -24,15 +54,23 @@ var OpenAlexAsyncQueue = class {
     const reader = this.readers.shift();
     if (reader) {
       reader.resolve({ value, done: false });
-    } else {
-      this.values.push(value);
+      return true;
     }
-    return true;
+
+    if (this.values.length < this.capacity) {
+      this.values.push(value);
+      return true;
+    }
+
+    return new Promise((resolve) => {
+      this.writers.push({ value, resolve });
+    });
   }
 
   close() {
     if (this.closed || this.error) return;
     this.closed = true;
+    this.settleWriters();
     for (const reader of this.readers.splice(0)) {
       reader.resolve({ value: undefined, done: true });
     }
@@ -42,6 +80,7 @@ var OpenAlexAsyncQueue = class {
     if (this.closed || this.error) return;
     this.error = error || new Error("Async queue failed.");
     this.values.length = 0;
+    this.settleWriters();
     for (const reader of this.readers.splice(0)) {
       reader.reject(this.error);
     }
@@ -50,9 +89,17 @@ var OpenAlexAsyncQueue = class {
   next() {
     if (this.error) return Promise.reject(this.error);
     if (this.values.length > 0) {
-      return Promise.resolve({ value: this.values.shift(), done: false });
+      const value = this.values.shift();
+      this.drainWriters();
+      return Promise.resolve({ value, done: false });
     }
     if (this.closed) return Promise.resolve({ value: undefined, done: true });
+
+    if (this.capacity === 0 && this.writers.length > 0) {
+      const writer = this.writers.shift();
+      writer.resolve(true);
+      return Promise.resolve({ value: writer.value, done: false });
+    }
 
     return new Promise((resolve, reject) => {
       this.readers.push({ resolve, reject });
@@ -71,14 +118,19 @@ var OpenAlexProvider = class {
     return Math.max(min, Math.min(max, Math.trunc(n)));
   }
 
+  static isTerminalOpenAlexError(error) {
+    return OPENALEX_TERMINAL_ERROR_CODES.has(error?.code);
+  }
+
   constructor({
     apiKey = "",
     maxForwardPerSeed = 100,
     maxBackwardPerSeed = 100,
     includeForward = true,
     includeBackward = true,
-    maxCandidatesTotal = 500,
+    maxCandidatesTotal = 1000,
     maxWorkers = OPENALEX_MAX_WORKERS,
+    eventBufferSize = OPENALEX_EVENT_BUFFER_SIZE,
     timeoutMs = 30000
   } = {}) {
     this.baseURL = "https://api.openalex.org";
@@ -91,12 +143,18 @@ var OpenAlexProvider = class {
     // intentionally ignores per-seed acquisition limits.
     this.maxForwardPerSeed = OpenAlexProvider.clampInt(maxForwardPerSeed, 0, 1000, 100);
     this.maxBackwardPerSeed = OpenAlexProvider.clampInt(maxBackwardPerSeed, 0, 1000, 100);
-    this.maxCandidatesTotal = OpenAlexProvider.clampInt(maxCandidatesTotal, 1, 10000, 500);
+    this.maxCandidatesTotal = OpenAlexProvider.clampInt(maxCandidatesTotal, 1, 10000, 1000);
     this.maxWorkers = OpenAlexProvider.clampInt(
       maxWorkers,
       1,
       OPENALEX_MAX_WORKERS,
       OPENALEX_MAX_WORKERS
+    );
+    this.eventBufferSize = OpenAlexProvider.clampInt(
+      eventBufferSize,
+      1,
+      10000,
+      OPENALEX_EVENT_BUFFER_SIZE
     );
     this.timeoutMs = OpenAlexProvider.clampInt(timeoutMs, 1000, 120000, 30000);
     this.includeForward = !!includeForward;
@@ -175,7 +233,9 @@ var OpenAlexProvider = class {
     try {
       return await this.fetchJSON(url, 1, signal);
     } catch (error) {
-      if (error?.name === "AbortError") throw error;
+      if (error?.name === "AbortError" || OpenAlexProvider.isTerminalOpenAlexError(error)) {
+        throw error;
+      }
       this.debug(`DOI lookup failed for ${doi}: ${error}`);
       return null;
     }
@@ -197,7 +257,9 @@ var OpenAlexProvider = class {
       const response = await this.fetchJSON(url, 1, signal);
       return response.results?.[0] || null;
     } catch (error) {
-      if (error?.name === "AbortError") throw error;
+      if (error?.name === "AbortError" || OpenAlexProvider.isTerminalOpenAlexError(error)) {
+        throw error;
+      }
       this.debug(`Title lookup failed for "${title}": ${error}`);
       return null;
     }
@@ -457,17 +519,24 @@ var OpenAlexProvider = class {
     if (signal?.aborted) return;
 
     const jobs = new OpenAlexAsyncQueue();
-    const events = new OpenAlexAsyncQueue();
+    const events = new OpenAlexAsyncQueue(this.eventBufferSize);
+    const requestController = new AbortController();
+    const requestSignal = requestController.signal;
     const workers = [];
     let queuedJobs = 0;
     let activeJobs = 0;
     let pendingJobs = 0;
     let completedJobs = 0;
     let terminal = false;
+    let finishing = false;
 
-    const emitProgress = (seed) => {
-      if (terminal) return;
-      events.push({
+    const pushEvent = async (event) => {
+      if (terminal) return false;
+      return !!(await events.push(event));
+    };
+
+    const emitProgress = async (seed) =>
+      pushEvent({
         type: "work-progress",
         queued: queuedJobs,
         active: activeJobs,
@@ -475,25 +544,30 @@ var OpenAlexProvider = class {
         completed: completedJobs,
         seed: this.shortSeedLabel(seed)
       });
-    };
 
-    const emitStatus = (phase, message) => {
-      if (terminal) return;
-      events.push({ type: "status", phase, message });
-    };
+    const emitStatus = async (phase, message) => pushEvent({ type: "status", phase, message });
 
     const abort = () => {
       if (terminal) return;
       terminal = true;
+      requestController.abort();
       jobs.fail(OpenAlexProvider.abortError());
       events.close();
+    };
+
+    const fail = (error) => {
+      if (terminal) return;
+      terminal = true;
+      requestController.abort();
+      jobs.fail(error);
+      events.fail(error);
     };
 
     const abortHandler = () => abort();
     signal?.addEventListener("abort", abortHandler, { once: true });
 
     const enqueue = (job) => {
-      if (terminal || signal?.aborted) return false;
+      if (terminal || requestSignal.aborted) return false;
       pendingJobs++;
       queuedJobs++;
       if (!jobs.push(job)) {
@@ -501,45 +575,53 @@ var OpenAlexProvider = class {
         queuedJobs--;
         return false;
       }
-      emitProgress(job.seed);
       return true;
     };
 
-    const emitCandidates = (results, direction, seed) => {
+    const emitCandidates = async (results, direction, seed) => {
       for (const work of results) {
-        if (terminal || signal?.aborted) return;
+        if (terminal || requestSignal.aborted) return false;
         const candidate = this.normalizeCandidate(work, { direction, seed });
-        if (candidate) events.push({ type: "candidate", candidate });
+        if (candidate && !(await pushEvent({ type: "candidate", candidate }))) return false;
       }
+      return true;
     };
 
     const executeJob = async (job) => {
       const label = this.shortSeedLabel(job.seed) || "seed";
 
       if (job.kind === "resolve") {
-        emitStatus(
-          "resolving",
-          `Resolving seed ${job.seedIndex + 1} of ${seeds.length}: ${label}`
-        );
-        const work = await this.resolveSeed(job.seed, signal);
+        if (
+          !(await emitStatus(
+            "resolving",
+            `Resolving seed ${job.seedIndex + 1} of ${seeds.length}: ${label}`
+          ))
+        ) {
+          return;
+        }
+        const work = await this.resolveSeed(job.seed, requestSignal);
         if (!work) {
-          emitStatus("resolve-error", `Could not resolve ${label}; continuing.`);
+          await emitStatus("resolve-error", `Could not resolve ${label}; continuing.`);
           return;
         }
 
-        if (terminal || signal?.aborted) return;
+        if (terminal || requestSignal.aborted) return;
         // Keep the seed event bounded for ranking consumers. The original
         // Work remains private to the queued jobs below so traversal is not
         // limited by this context payload.
-        events.push({
-          type: "seed-resolved",
-          seedIndex: job.seedIndex,
-          seed: job.seed,
-          work: {
-            id: this.shortOpenAlexID(work.id),
-            referenced_works: this.normalizeReferencedWorks(work.referenced_works, 5000)
-          }
-        });
+        if (
+          !(await pushEvent({
+            type: "seed-resolved",
+            seedIndex: job.seedIndex,
+            seed: job.seed,
+            work: {
+              id: this.shortOpenAlexID(work.id),
+              referenced_works: this.normalizeReferencedWorks(work.referenced_works, 5000)
+            }
+          }))
+        ) {
+          return;
+        }
 
         if (this.includeBackward) {
           const ids = this.normalizeReferencedWorks(work.referenced_works);
@@ -569,21 +651,21 @@ var OpenAlexProvider = class {
       }
 
       if (job.kind === "backward") {
-        emitStatus("backward", `Fetching backward references for ${label}…`);
-        const response = await this.fetchBackwardChunk(job.ids, signal);
+        if (!(await emitStatus("backward", `Fetching backward references for ${label}…`))) return;
+        const response = await this.fetchBackwardChunk(job.ids, requestSignal);
         const results = Array.isArray(response?.results) ? response.results : [];
-        emitCandidates(results, "backward", job.seed);
+        await emitCandidates(results, "backward", job.seed);
         return;
       }
 
       if (job.kind === "forward") {
-        emitStatus("forward", `Fetching forward citations for ${label}…`);
-        const response = await this.fetchForwardPage(job.openAlexID, job.cursor, signal);
+        if (!(await emitStatus("forward", `Fetching forward citations for ${label}…`))) return;
+        const response = await this.fetchForwardPage(job.openAlexID, job.cursor, requestSignal);
         const results = Array.isArray(response?.results) ? response.results : [];
-        emitCandidates(results, "forward", job.seed);
+        if (!(await emitCandidates(results, "forward", job.seed))) return;
 
         const nextCursor = response?.meta?.next_cursor || null;
-        if (!terminal && !signal?.aborted && nextCursor) {
+        if (!terminal && !requestSignal.aborted && nextCursor) {
           enqueue({
             kind: "forward",
             seed: job.seed,
@@ -595,11 +677,13 @@ var OpenAlexProvider = class {
       }
     };
 
-    const maybeFinish = () => {
-      if (terminal || pendingJobs !== 0 || activeJobs !== 0) return;
-      terminal = true;
+    const maybeFinish = async () => {
+      if (terminal || finishing || pendingJobs !== 0 || activeJobs !== 0) return;
+      finishing = true;
       jobs.close();
-      events.push({ type: "status", phase: "done", message: "Done" });
+      if (!(await pushEvent({ type: "status", phase: "done", message: "Done" }))) return;
+      if (terminal) return;
+      terminal = true;
       events.close();
     };
 
@@ -609,10 +693,8 @@ var OpenAlexProvider = class {
         try {
           result = await jobs.next();
         } catch (error) {
-          if (terminal || signal?.aborted || error?.name === "AbortError") return;
-          terminal = true;
-          jobs.fail(error);
-          events.fail(error);
+          if (terminal || requestSignal.aborted || error?.name === "AbortError") return;
+          fail(error);
           return;
         }
         if (result.done || terminal) return;
@@ -620,15 +702,17 @@ var OpenAlexProvider = class {
         const job = result.value;
         queuedJobs--;
         activeJobs++;
-        emitProgress(job.seed);
         try {
+          if (!(await emitProgress(job.seed))) return;
           await executeJob(job);
         } catch (error) {
-          if (error?.name === "AbortError" || signal?.aborted) {
+          if (error?.name === "AbortError" || requestSignal.aborted) {
             abort();
+          } else if (OpenAlexProvider.isTerminalOpenAlexError(error)) {
+            fail(error);
           } else if (!terminal) {
             const kind = job.kind === "resolve" ? "seed resolution" : `${job.kind} crawl`;
-            emitStatus(
+            await emitStatus(
               "error",
               `${kind} failed for ${this.shortSeedLabel(job.seed) || "seed"}; continuing.`
             );
@@ -639,8 +723,7 @@ var OpenAlexProvider = class {
           pendingJobs--;
           completedJobs++;
           if (!terminal) {
-            emitProgress(job.seed);
-            maybeFinish();
+            if (await emitProgress(job.seed)) await maybeFinish();
           }
         }
       }
@@ -653,7 +736,7 @@ var OpenAlexProvider = class {
     for (let i = 0; i < this.maxWorkers && !terminal; i++) {
       workers.push(runWorker());
     }
-    maybeFinish();
+    await maybeFinish();
 
     try {
       for await (const event of events) {

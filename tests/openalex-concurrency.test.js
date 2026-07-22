@@ -88,6 +88,12 @@ function seedIndexFromDOI(url) {
   return Number(doi.split("-").at(-1));
 }
 
+const TERMINAL_OPENALEX_ERROR_CODES = [
+  "OPENALEX_CREDENTIALS",
+  "OPENALEX_BUDGET_EXHAUSTED",
+  "OPENALEX_THROTTLED"
+];
+
 test("starts at most twenty seed requests and reports bounded work progress", async () => {
   const seeds = Array.from({ length: 25 }, (_, index) => ({
     doi: `10.1000/seed-${index}`,
@@ -96,9 +102,9 @@ test("starts at most twenty seed requests and reports bounded work progress", as
 
   let inFlight = 0;
   let peakInFlight = 0;
-  let release;
+  let release = () => {};
   const gate = new Promise((resolve) => {
-    release = resolve;
+    release = () => resolve();
   });
 
   const fetchJSON = async (url) => {
@@ -130,6 +136,15 @@ test("starts at most twenty seed requests and reports bounded work progress", as
     release();
     await eventsPromise;
   }
+});
+
+test("defaults the legacy provider candidate cap to 1,000", () => {
+  const context = loadOpenAlex(async () => ({ results: [] }));
+  assert.equal(new context.OpenAlexProvider().maxCandidatesTotal, 1000);
+  assert.equal(
+    new context.OpenAlexProvider({ maxCandidatesTotal: "not-a-number" }).maxCandidatesTotal,
+    1000
+  );
 });
 
 test("hydrates every backward reference in exhaustive 100-ID chunks", async () => {
@@ -232,7 +247,10 @@ test("requeues multiple forward cursors fairly", async () => {
   });
   provider.resolveSeed = async (seed) => makeWork(seed.id);
 
-  const seeds = [{ id: "S1", title: "Seed 1" }, { id: "S2", title: "Seed 2" }];
+  const seeds = [
+    { id: "S1", title: "Seed 1" },
+    { id: "S2", title: "Seed 2" }
+  ];
   const events = await collectEvents(provider, seeds);
 
   assert.deepEqual(requestOrder, ["S1:*", "S2:*", "S1:S1-next", "S2:S2-next"]);
@@ -261,12 +279,211 @@ test("aborting the event queue rejects pending and future readers", async () => 
   assert.equal(closedResult.done, true);
 });
 
+test("bounds candidate production at capacity and settles a blocked producer on failure", async () => {
+  const context = loadOpenAlex(async () => ({ results: [] }));
+  const capacity = 2;
+  const queue = new context.OpenAlexAsyncQueue(capacity);
+  let produced = 0;
+
+  const producer = (async () => {
+    for (let index = 0; index < 5; index++) {
+      const accepted = await queue.push({ type: "candidate", id: index });
+      if (!accepted) return;
+      produced++;
+    }
+  })();
+
+  await flushMicrotasks();
+  assert.equal(produced, capacity);
+
+  const first = await queue.next();
+  assert.deepEqual(first.value, { type: "candidate", id: 0 });
+  await flushMicrotasks();
+  assert.equal(produced, capacity + 1);
+
+  const error = abortError();
+  queue.fail(error);
+  await producer;
+  assert.equal(produced, capacity + 1);
+  assert.equal(queue.values.length, 0);
+  assert.equal(queue.writers.length, 0);
+  await assert.rejects(queue.next(), (caught) => caught === error);
+
+  const closedQueue = new context.OpenAlexAsyncQueue(1);
+  assert.equal(closedQueue.push({ type: "candidate", id: "buffered" }), true);
+  const blockedPush = closedQueue.push({ type: "candidate", id: "blocked" });
+  closedQueue.close();
+  assert.equal(await blockedPush, false);
+  const bufferedResult = await closedQueue.next();
+  assert.equal(bufferedResult.value.type, "candidate");
+  assert.equal(bufferedResult.value.id, "buffered");
+  assert.equal(bufferedResult.done, false);
+  const closedResult = await closedQueue.next();
+  assert.equal(closedResult.value, undefined);
+  assert.equal(closedResult.done, true);
+});
+
+test("stream candidate production waits for the configured event capacity and aborts cleanly", async () => {
+  const controller = new AbortController();
+  setMaxListeners(0, controller.signal);
+  const capacity = 2;
+  const context = loadOpenAlex(async () => ({ results: [] }));
+  const provider = new context.OpenAlexProvider({
+    maxWorkers: 1,
+    eventBufferSize: capacity,
+    includeForward: false,
+    includeBackward: true
+  });
+  provider.resolveSeed = async () => makeWork("SEED", ["R1"]);
+
+  let fetchFinished = false;
+  let normalized = 0;
+  const normalizeCandidate = provider.normalizeCandidate.bind(provider);
+  provider.normalizeCandidate = (...args) => {
+    normalized++;
+    return normalizeCandidate(...args);
+  };
+  provider.fetchBackwardChunk = async () => {
+    fetchFinished = true;
+    return {
+      results: Array.from({ length: 5 }, (_, index) => makeWork(`C${index + 1}`))
+    };
+  };
+
+  const iterator = provider.streamSnowball([{ title: "Seed" }], controller.signal);
+  let returned = false;
+  try {
+    const first = await iterator.next();
+    assert.equal(first.value.type, "status");
+
+    let event;
+    do {
+      event = await iterator.next();
+    } while (event.value?.type !== "status" || event.value.phase !== "backward");
+
+    await flushMicrotasks();
+    assert.equal(fetchFinished, true);
+    assert.equal(normalized, capacity + 1);
+
+    const resumed = await iterator.next();
+    assert.equal(resumed.value.type, "candidate");
+    await flushMicrotasks();
+    assert.equal(normalized, capacity + 2);
+
+    controller.abort();
+    const completion = await Promise.race([
+      iterator.return(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("iterator did not settle")), 250)
+      )
+    ]);
+    returned = true;
+    assert.equal(completion.done, true);
+  } finally {
+    controller.abort();
+    if (!returned) await iterator.return().catch(() => {});
+  }
+});
+
+for (const method of ["getWorkByDOI", "searchWorkByTitle"]) {
+  for (const code of TERMINAL_OPENALEX_ERROR_CODES) {
+    test(`${method} preserves ${code}`, async () => {
+      const error = Object.assign(new Error(code), { code });
+      const context = loadOpenAlex(async () => {
+        throw error;
+      });
+      const provider = new context.OpenAlexProvider();
+      const lookup =
+        method === "getWorkByDOI"
+          ? provider.getWorkByDOI("10.1000/terminal")
+          : provider.searchWorkByTitle("Terminal error", 2024);
+
+      await assert.rejects(lookup, (caught) => caught === error);
+    });
+  }
+}
+
+for (const code of TERMINAL_OPENALEX_ERROR_CODES) {
+  test(`stream aborts remaining workers and preserves first ${code}`, async () => {
+    const controller = new AbortController();
+    setMaxListeners(0, controller.signal);
+    const terminalError = Object.assign(new Error(code), { code });
+    let started = 0;
+    let aborted = 0;
+    let rejectFirst;
+    const firstResponse = new Promise((_, reject) => {
+      rejectFirst = reject;
+    });
+
+    const fetchJSON = (_url, { signal }) => {
+      started++;
+      setMaxListeners(0, signal);
+      if (started === 1) return firstResponse;
+
+      const request = new Promise((resolve, reject) => {
+        const onAbort = () => {
+          signal.removeEventListener("abort", onAbort);
+          aborted++;
+          reject(abortError());
+        };
+        if (signal?.aborted) onAbort();
+        else signal?.addEventListener("abort", onAbort);
+      });
+      if (started === 20) rejectFirst(terminalError);
+      return request;
+    };
+
+    const context = loadOpenAlex(fetchJSON);
+    const provider = new context.OpenAlexProvider({ maxWorkers: 20 });
+    const eventsPromise = collectEvents(
+      provider,
+      Array.from({ length: 25 }, (_, index) => ({ doi: `10.1000/terminal-${index}` })),
+      controller.signal
+    );
+    const timeout = setTimeout(() => controller.abort(), 250);
+
+    try {
+      await assert.rejects(eventsPromise, (caught) => caught === terminalError);
+      assert.equal(started, 20);
+      assert.equal(aborted, started - 1);
+    } finally {
+      clearTimeout(timeout);
+      controller.abort();
+      await eventsPromise.catch(() => {});
+    }
+  });
+}
+
+test("ordinary seed lookup failures remain nonfatal per seed", async () => {
+  const fetchJSON = async (url) => {
+    if (String(url).includes("ordinary-failure")) {
+      throw new Error("ordinary lookup failed");
+    }
+    return makeWork("GOOD");
+  };
+  const context = loadOpenAlex(fetchJSON);
+  const provider = new context.OpenAlexProvider({
+    maxWorkers: 2,
+    includeForward: false,
+    includeBackward: false
+  });
+
+  const events = await collectEvents(provider, [
+    { doi: "10.1000/ordinary-failure" },
+    { doi: "10.1000/ordinary-success" }
+  ]);
+
+  assert.ok(events.some((event) => event.type === "status" && event.phase === "resolve-error"));
+  assert.ok(events.some((event) => event.type === "seed-resolved"));
+});
+
 test("aborting a crawl terminates pending worker requests and the async stream", async () => {
   const controller = new AbortController();
   setMaxListeners(0, controller.signal);
   let started = 0;
   const fetchJSON = (_url, { signal }) => {
     started++;
+    setMaxListeners(0, signal);
     return new Promise((resolve, reject) => {
       const onAbort = () => {
         signal.removeEventListener("abort", onAbort);
