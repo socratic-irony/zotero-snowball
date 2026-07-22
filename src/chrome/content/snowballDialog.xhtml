@@ -9,8 +9,7 @@
   width="1200"
   height="780"
   minwidth="900"
-  minheight="520"
-  onload="SnowballDialog.onLoad(window.arguments[0])">
+  minheight="520">
 
   <linkset>
     <html:link rel="localization" href="snowball-sources.ftl"/>
@@ -153,17 +152,14 @@
       <spacer flex="1"/>
       <button id="snowball-stop"
               label="Stop"
-              hidden="hidden"
-              oncommand="SnowballDialog.stop()"/>
+              hidden="hidden"/>
       <button id="snowball-cancel"
               label="Cancel"
-              data-l10n-id="snowball-sources-button-cancel"
-              oncommand="window.close()"/>
+              data-l10n-id="snowball-sources-button-cancel"/>
       <button id="snowball-add-selected"
               label="Add Selected to Zotero"
               data-l10n-id="snowball-sources-button-add-selected"
-              class="primary"
-              oncommand="SnowballDialog.addSelected()"/>
+              class="primary"/>
     </hbox>
   </vbox>
 </window>

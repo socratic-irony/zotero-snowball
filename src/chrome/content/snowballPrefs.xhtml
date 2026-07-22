@@ -7,8 +7,7 @@
   xmlns:html="http://www.w3.org/1999/xhtml"
   title="Snowball Sources Preferences"
   width="600"
-  height="720"
-  onload="SnowballPrefs.onLoad(window.arguments[0])">
+  height="720">
 
   <script src="chrome://snowball-sources/content/modules/log.js"/>
   <script src="chrome://snowball-sources/content/modules/errors.js"/>
@@ -138,8 +137,7 @@
       <html:div id="snowball-weight-controls" class="snowball-weights"/>
 
       <html:div class="row" style="justify-content: flex-end">
-        <html:button type="button" id="snowball-weights-reset"
-                     onclick="SnowballPrefs.resetWeights()">Reset to defaults</html:button>
+        <html:button type="button" id="snowball-weights-reset">Reset to defaults</html:button>
       </html:div>
     </html:section>
 
@@ -152,11 +150,10 @@
 
     <hbox align="center" class="snowball-prefs-footer">
       <spacer flex="1"/>
-      <button id="snowball-prefs-cancel" label="Cancel" oncommand="window.close()"/>
-      <button id="snowball-prefs-save" label="Save" class="primary"
-              oncommand="SnowballPrefs.save()"/>
+      <button id="snowball-prefs-cancel" label="Cancel"/>
+      <button id="snowball-prefs-save" label="Save" class="primary"/>
       <button id="snowball-prefs-save-anyway" label="Save anyway" class="primary"
-              hidden="hidden" oncommand="SnowballPrefs.saveConfirmed()"/>
+              hidden="hidden"/>
     </hbox>
   </vbox>
 </window>

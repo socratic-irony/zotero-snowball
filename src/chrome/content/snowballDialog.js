@@ -514,6 +514,12 @@ var SnowballDialog = {
       this.refresh();
     });
 
+    document.getElementById("snowball-stop")?.addEventListener("command", () => this.stop());
+    document.getElementById("snowball-cancel")?.addEventListener("command", () => window.close());
+    document
+      .getElementById("snowball-add-selected")
+      ?.addEventListener("command", () => this.addSelected());
+
     // Min-cites runtime input (default seeded from prefs).
     const minCitesInput = document.getElementById("snowball-mincites-input");
     if (minCitesInput) {
@@ -1388,3 +1394,7 @@ var SnowballDialog = {
     return document.createElementNS("http://www.w3.org/1999/xhtml", tagName);
   }
 };
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("load", () => SnowballDialog.onLoad(window.arguments[0]), { once: true });
+}

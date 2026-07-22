@@ -118,6 +118,52 @@ test("API key fields conceal values and disable autocomplete", () => {
   }
 });
 
+test("inline event handlers are replaced with lifecycle and button listeners", () => {
+  const documents = [
+    {
+      document: "src/chrome/content/snowballDialog.xhtml",
+      script: "src/chrome/content/snowballDialog.js",
+      commandButtons: ["snowball-stop", "snowball-cancel", "snowball-add-selected"]
+    },
+    {
+      document: "src/chrome/content/snowballPrefs.xhtml",
+      script: "src/chrome/content/snowballPrefs.js",
+      commandButtons: [
+        "snowball-prefs-cancel",
+        "snowball-prefs-save",
+        "snowball-prefs-save-anyway"
+      ],
+      clickButtons: ["snowball-weights-reset"]
+    }
+  ];
+
+  for (const entry of documents) {
+    const documentSource = fs.readFileSync(path.join(ROOT, entry.document), "utf8");
+    const scriptSource = fs.readFileSync(path.join(ROOT, entry.script), "utf8");
+
+    assert.doesNotMatch(
+      documentSource,
+      /\bon[a-z]+\s*=/i,
+      `${entry.document} has an inline handler`
+    );
+    assert.match(scriptSource, /window\.addEventListener\(\s*["']load["'][\s\S]*?once\s*:\s*true/);
+    assert.match(scriptSource, /window\.arguments\[0\]/);
+
+    for (const id of entry.commandButtons || []) {
+      assert.match(
+        scriptSource,
+        new RegExp(`getElementById\\("${id}"\\)[\\s\\S]*?addEventListener\\("command"`)
+      );
+    }
+    for (const id of entry.clickButtons || []) {
+      assert.match(
+        scriptSource,
+        new RegExp(`getElementById\\("${id}"\\)[\\s\\S]*?addEventListener\\("click"`)
+      );
+    }
+  }
+});
+
 test("toolbar uses a native-size transparent context-painted SVG", () => {
   const iconPath = path.join(ROOT, "src/chrome/content/icons/snowball.svg");
   assert.ok(fs.existsSync(iconPath), "canonical toolbar SVG must exist");

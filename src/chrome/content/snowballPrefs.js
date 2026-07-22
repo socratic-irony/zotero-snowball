@@ -58,6 +58,7 @@ var SnowballPrefs = {
   onLoad(args) {
     try {
       this.args = args || {};
+      this.bindControls();
       for (const [name, spec] of Object.entries(this.schema)) {
         const input = document.getElementById(`pref-${name.replace(/\./g, "-")}`);
         if (!input) continue;
@@ -99,6 +100,19 @@ var SnowballPrefs = {
         /* ignore */
       }
     }
+  },
+
+  bindControls() {
+    document
+      .getElementById("snowball-weights-reset")
+      ?.addEventListener("click", () => this.resetWeights());
+    document
+      .getElementById("snowball-prefs-cancel")
+      ?.addEventListener("command", () => window.close());
+    document.getElementById("snowball-prefs-save")?.addEventListener("command", () => this.save());
+    document
+      .getElementById("snowball-prefs-save-anyway")
+      ?.addEventListener("command", () => this.saveConfirmed());
   },
 
   /**
@@ -309,3 +323,7 @@ var SnowballPrefs = {
     }
   }
 };
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("load", () => SnowballPrefs.onLoad(window.arguments[0]), { once: true });
+}
