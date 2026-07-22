@@ -76,10 +76,10 @@ var OpenAlexAsyncQueue = class {
     }
   }
 
-  fail(error) {
+  fail(error, options = {}) {
     if (this.closed || this.error) return;
     this.error = error || new Error("Async queue failed.");
-    this.values.length = 0;
+    if (options?.drain !== true) this.values.length = 0;
     this.settleWriters();
     for (const reader of this.readers.splice(0)) {
       reader.reject(this.error);
@@ -87,12 +87,12 @@ var OpenAlexAsyncQueue = class {
   }
 
   next() {
-    if (this.error) return Promise.reject(this.error);
     if (this.values.length > 0) {
       const value = this.values.shift();
       this.drainWriters();
       return Promise.resolve({ value, done: false });
     }
+    if (this.error) return Promise.reject(this.error);
     if (this.closed) return Promise.resolve({ value: undefined, done: true });
 
     if (this.capacity === 0 && this.writers.length > 0) {
@@ -560,7 +560,7 @@ var OpenAlexProvider = class {
       terminal = true;
       requestController.abort();
       jobs.fail(error);
-      events.fail(error);
+      events.fail(error, { drain: true });
     };
 
     const abortHandler = () => abort();

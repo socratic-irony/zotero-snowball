@@ -279,6 +279,35 @@ test("aborting the event queue rejects pending and future readers", async () => 
   assert.equal(closedResult.done, true);
 });
 
+test("event failure drains accepted FIFO values while job failure discards queued work", async () => {
+  const context = loadOpenAlex(async () => ({ results: [] }));
+  const error = abortError();
+
+  const events = new context.OpenAlexAsyncQueue(2);
+  events.push({ type: "candidate", id: "C1" });
+  events.push({ type: "candidate", id: "C2" });
+  const blockedEvent = events.push({ type: "candidate", id: "C3" });
+  events.fail(error, { drain: true });
+
+  assert.equal(await blockedEvent, false);
+  assert.equal((await events.next()).value.id, "C1");
+  assert.equal((await events.next()).value.id, "C2");
+  await assert.rejects(events.next(), (caught) => caught === error);
+
+  const jobs = new context.OpenAlexAsyncQueue(1);
+  jobs.push({ id: "queued" });
+  const blockedJob = jobs.push({ id: "blocked" });
+  jobs.fail(error);
+  assert.equal(await blockedJob, false);
+  assert.equal(jobs.values.length, 0);
+  await assert.rejects(jobs.next(), (caught) => caught === error);
+
+  const waitingJobs = new context.OpenAlexAsyncQueue(1);
+  const waitingReader = waitingJobs.next();
+  waitingJobs.fail(error);
+  await assert.rejects(waitingReader, (caught) => caught === error);
+});
+
 test("bounds candidate production at capacity and settles a blocked producer on failure", async () => {
   const context = loadOpenAlex(async () => ({ results: [] }));
   const capacity = 2;
@@ -383,6 +412,78 @@ test("stream candidate production waits for the configured event capacity and ab
     controller.abort();
     if (!returned) await iterator.return().catch(() => {});
   }
+});
+
+test("terminal stream errors drain buffered candidates in FIFO order before throwing", async () => {
+  const terminalError = Object.assign(new Error("credentials rejected"), {
+    code: "OPENALEX_CREDENTIALS"
+  });
+  const context = loadOpenAlex(async () => ({ results: [] }));
+  const provider = new context.OpenAlexProvider({
+    maxWorkers: 2,
+    eventBufferSize: 20,
+    includeForward: false,
+    includeBackward: true
+  });
+
+  let resolveCandidatesReady;
+  const candidatesReady = new Promise((resolve) => {
+    resolveCandidatesReady = resolve;
+  });
+  let resolveTerminalStarted;
+  const terminalStarted = new Promise((resolve) => {
+    resolveTerminalStarted = resolve;
+  });
+  let normalizedCandidates = 0;
+  const normalizeCandidate = provider.normalizeCandidate.bind(provider);
+  provider.normalizeCandidate = (...args) => {
+    normalizedCandidates++;
+    const candidate = normalizeCandidate(...args);
+    if (normalizedCandidates === 2) resolveCandidatesReady();
+    return candidate;
+  };
+  provider.resolveSeed = async (seed) => {
+    if (seed.id === "terminal") {
+      await candidatesReady;
+      resolveTerminalStarted();
+      throw terminalError;
+    }
+    return makeWork("SEED", ["R1"]);
+  };
+  provider.fetchBackwardChunk = async () => ({
+    results: [makeWork("C1"), makeWork("C2")]
+  });
+
+  const iterator = provider.streamSnowball([
+    { id: "candidate", title: "Candidate seed" },
+    { id: "terminal", title: "Terminal seed" }
+  ]);
+  const seen = [];
+  seen.push((await iterator.next()).value);
+  seen.push((await iterator.next()).value);
+
+  await Promise.race([
+    terminalStarted,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("terminal did not start")), 250))
+  ]);
+
+  let caught;
+  try {
+    while (true) {
+      const result = await iterator.next();
+      if (result.done) break;
+      seen.push(result.value);
+    }
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.equal(normalizedCandidates, 2);
+  assert.equal(caught, terminalError);
+  assert.deepEqual(
+    candidateEvents(seen).map((event) => event.candidate.openAlexID),
+    ["https://openalex.org/C1", "https://openalex.org/C2"]
+  );
 });
 
 for (const method of ["getWorkByDOI", "searchWorkByTitle"]) {
