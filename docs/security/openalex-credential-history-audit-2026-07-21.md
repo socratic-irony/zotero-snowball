@@ -8,9 +8,11 @@ Status: **No credible OpenAlex credential exposure found in the scanned public h
 
 ## Coverage
 
-The audit used the current local public refs after the already-completed fetch. No
-additional fetch, history rewrite, key revocation, push, or source change was
-performed.
+The audit used the current local public refs after the already-completed fetch.
+A live `git ls-remote --heads --tags origin` cross-check on 2026-07-21 confirmed
+that all 8 public branch tips and all 14 public tag objects matched the local
+refs used by the scan. No additional fetch, history rewrite, key revocation,
+push, or source change was performed.
 
 Scanned refs:
 
@@ -49,6 +51,9 @@ All methods were local and metadata-only at output time:
    entropy threshold of 3.5. It examined 11,524 tokens, including 10,088 above
    the threshold and 147 hash-like tokens; none occurred as a credible OpenAlex
    credential.
+7. Cross-checked the scanned branch and tag object IDs against the live public
+   GitHub remote with `git ls-remote --heads --tags origin`; every public ref
+   matched the local object used by the audit.
 
 ## Sanitized findings
 
@@ -75,18 +80,12 @@ fragment is included in this report.
   automatically attempted a fetch and aborted before scanning because the
   worktree metadata is restricted; it was not rerun and its output was not used
   as evidence.
-- A direct `git ls-remote --heads --tags origin` cross-check could not resolve
-  `github.com` in the shell sandbox. The public GitHub repository page confirms
-  the repository is public and identifies `main` as the default branch, but its
-  cached history count was older than the fetched local refs. Accordingly, this
-  audit's exact coverage claim is limited to the current local `origin/*` refs
-  and tags listed above.
 - This is a static history audit. It does not inspect provider-side logs,
   workstation credential stores, unreachable Git objects, or refs that were not
-  present locally at audit time.
+  published by the remote at cross-check time.
 
 ## Result
 
-Based on the scanned public refs, reachable commits/diffs/blobs, keyword
+Based on the live-confirmed public refs, reachable commits/diffs/blobs, keyword
 searches, bytewise binary scan, and high-entropy pass, no immediate OpenAlex
 credential rotation is indicated by this history audit.
