@@ -68,6 +68,55 @@ test("SnowballLog.formatError preserves error name and stack but scrubs secrets"
   assert.ok(!out.includes("LEAKED"), "secret stripped");
 });
 
+test("SnowballLog.format recursively redacts nested objects and arrays", () => {
+  const ctx = loadScripts(["log.js"]);
+  const context = {
+    request: {
+      headers: {
+        Authorization: "Bearer HEADER_SECRET",
+        "X-API-Key": "HEADER_KEY_SECRET"
+      },
+      query: { API_KEY: "QUERY_SECRET", status: "ok" },
+      values: [{ token: "ARRAY_SECRET" }, "https://x.example/?api_key=STRING_SECRET"]
+    }
+  };
+
+  const out = ctx.SnowballLog.format("error", "request failed", context);
+
+  for (const leak of [
+    "HEADER_SECRET",
+    "HEADER_KEY_SECRET",
+    "QUERY_SECRET",
+    "ARRAY_SECRET",
+    "STRING_SECRET"
+  ]) {
+    assert.ok(!out.includes(leak), `${leak} must be redacted`);
+  }
+  assert.ok(out.includes('"status":"ok"'), "non-secret nested values must survive");
+  assert.ok(out.includes("<redacted>"), "redaction marker must be present");
+});
+
+test("SnowballLog.format recursively guards cyclic and excessively deep context", () => {
+  const ctx = loadScripts(["log.js"]);
+  const context = { cycle: { token: "CYCLE_SECRET" } };
+  context.cycle.self = context.cycle;
+  let cursor = context;
+  for (let index = 0; index < 20; index++) {
+    cursor.next = {};
+    cursor = cursor.next;
+  }
+  cursor.value = "api_key=DEEP_SECRET";
+
+  let out = "";
+  assert.doesNotThrow(() => {
+    out = ctx.SnowballLog.format("error", "request failed", context);
+  });
+  assert.ok(!out.includes("CYCLE_SECRET"), "cyclic secret must be redacted");
+  assert.ok(!out.includes("DEEP_SECRET"), "deep secret must not leak");
+  assert.ok(out.includes("<circular>"), "cycles must use a safe marker");
+  assert.ok(out.includes("<max-depth>"), "deep values must use a safe marker");
+});
+
 test("SnowballHTTP.assertSafeURL rejects non-https URLs", () => {
   const ctx = loadScripts(["log.js", "errors.js", "http.js"]);
   assert.throws(

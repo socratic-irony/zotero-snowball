@@ -24,6 +24,9 @@ var SnowballLog = {
   // Header names that should never be echoed back into logs.
   SECRET_HEADERS: ["authorization", "x-api-key", "api-key"],
 
+  // Keep structured logging bounded even when provider data is unexpectedly deep.
+  MAX_SCRUB_DEPTH: 8,
+
   /**
    * Replace any secret-bearing query params or `key=value` substrings with
    * a placeholder. Conservative: prefers false positives (over-redaction)
@@ -45,27 +48,65 @@ var SnowballLog = {
     return s;
   },
 
+  _isSecretKey(key) {
+    const normalized = String(key).toLowerCase();
+    return this.SECRET_PARAMS.includes(normalized) || this.SECRET_HEADERS.includes(normalized);
+  },
+
+  /**
+   * Return a bounded, scrubbed copy of structured log data.
+   * Cycles are replaced with a marker and deep values are not traversed.
+   */
+  scrubValue(value, depth = 0, seen = new WeakSet()) {
+    if (depth >= this.MAX_SCRUB_DEPTH) return "<max-depth>";
+    if (typeof value === "string") return this.scrub(value);
+    if (value == null || typeof value === "number" || typeof value === "boolean") return value;
+
+    if (typeof value === "object") {
+      if (seen.has(value)) return "<circular>";
+      seen.add(value);
+      try {
+        if (Array.isArray(value)) {
+          return value.map((item) => this.scrubValue(item, depth + 1, seen));
+        }
+
+        const safe = {};
+        for (const [key, child] of Object.entries(value)) {
+          if (this._isSecretKey(key)) safe[key] = "<redacted>";
+          else {
+            try {
+              safe[key] = this.scrubValue(child, depth + 1, seen);
+            } catch (_) {
+              safe[key] = "<unserializable>";
+            }
+          }
+        }
+        return safe;
+      } finally {
+        seen.delete(value);
+      }
+    }
+
+    try {
+      return this.scrub(String(value));
+    } catch (_) {
+      return "<unserializable>";
+    }
+  },
+
   /**
    * Build a clean string from a message + structured context object.
-   * Context keys are scrubbed; non-serializable values are coerced to
-   * String() so we never throw inside the logger itself.
+   * Context values are recursively scrubbed; non-serializable values are
+   * coerced to String() so we never throw inside the logger itself.
    */
   format(level, message, context) {
     const parts = [`[${this.TAG}] ${level.toUpperCase()} ${this.scrub(message)}`];
     if (context && typeof context === "object") {
-      const safe = {};
-      for (const [k, v] of Object.entries(context)) {
-        try {
-          safe[k] = typeof v === "string" ? this.scrub(v) : v;
-        } catch (_) {
-          safe[k] = "<unserializable>";
-        }
-      }
+      const safe = this.scrubValue(context);
       try {
         parts.push(JSON.stringify(safe));
       } catch (_) {
-        // Cyclic structure → fall back to key list only.
-        parts.push(`{keys: ${Object.keys(safe).join(",")}}`);
+        parts.push("{context: <unserializable>}");
       }
     }
     return parts.join(" ");
