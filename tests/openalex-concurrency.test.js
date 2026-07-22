@@ -257,6 +257,53 @@ test("requeues multiple forward cursors fairly", async () => {
   assert.equal(candidateEvents(events).length, 4);
 });
 
+for (const mode of ["streamSnowball", "streamForward"]) {
+  /** @type {Array<[string, Record<string, string>, string[]]>} */
+  const cursorCases = [
+    ["a repeated cursor", { "*": "A", A: "A" }, ["*", "A"]],
+    ["an A-to-B-to-A cursor cycle", { "*": "A", A: "B", B: "A" }, ["*", "A", "B"]]
+  ];
+  for (const [description, nextCursorByCursor, expectedCursors] of cursorCases) {
+    test(`${mode} stops on ${description}`, async () => {
+      const requests = [];
+      const context = loadOpenAlex(async () => ({ results: [] }));
+      const provider = new context.OpenAlexProvider({
+        maxWorkers: 1,
+        includeForward: true,
+        includeBackward: false
+      });
+      provider.fetchForwardPage = async (_openAlexID, cursor) => {
+        requests.push(cursor);
+        if (requests.length > expectedCursors.length + 2) {
+          throw new Error("cursor cycle was not stopped");
+        }
+        return {
+          results: [makeWork(`F${requests.length}`)],
+          meta: { next_cursor: nextCursorByCursor[cursor] || null }
+        };
+      };
+
+      let candidates;
+      if (mode === "streamSnowball") {
+        provider.resolveSeed = async () => makeWork("SEED");
+        const events = await collectEvents(provider, [{ title: "Seed" }]);
+        candidates = candidateEvents(events).map((event) => event.candidate);
+      } else {
+        candidates = [];
+        for await (const candidate of provider.streamForward({ title: "Seed" }, makeWork("SEED"))) {
+          candidates.push(candidate);
+        }
+      }
+
+      assert.deepEqual(requests, expectedCursors);
+      assert.deepEqual(
+        candidates.map((candidate) => candidate.openAlexID),
+        expectedCursors.map((_, index) => `https://openalex.org/F${index + 1}`)
+      );
+    });
+  }
+}
+
 test("aborting the event queue rejects pending and future readers", async () => {
   const context = loadOpenAlex(async () => ({ results: [] }));
   assert.equal(typeof context.OpenAlexAsyncQueue, "function");
@@ -412,6 +459,184 @@ test("stream candidate production waits for the configured event capacity and ab
     controller.abort();
     if (!returned) await iterator.return().catch(() => {});
   }
+});
+
+test("bounds queued frontier while one seed still uses twenty backward workers", async () => {
+  const maxWorkers = 20;
+  const referencedWorks = Array.from({ length: 5000 }, (_, index) => `R${index + 1}`);
+  let inFlight = 0;
+  let peakInFlight = 0;
+  let requests = 0;
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = () => resolve();
+  });
+  let resolvePeak;
+  const peakReached = new Promise((resolve) => {
+    resolvePeak = resolve;
+  });
+
+  const context = loadOpenAlex(async () => ({ results: [] }));
+  const provider = new context.OpenAlexProvider({
+    maxWorkers,
+    eventBufferSize: 1000,
+    includeForward: false,
+    includeBackward: true
+  });
+  provider.resolveSeed = async () => makeWork("SEED", referencedWorks);
+  provider.fetchBackwardChunk = async () => {
+    requests++;
+    inFlight++;
+    peakInFlight = Math.max(peakInFlight, inFlight);
+    if (peakInFlight === maxWorkers) resolvePeak();
+    await gate;
+    inFlight--;
+    return { results: [] };
+  };
+
+  const iterator = provider.streamSnowball([{ title: "Seed" }]);
+  let returned = false;
+  try {
+    assert.equal((await iterator.next()).value.type, "status");
+    assert.ok((await iterator.next()).value);
+
+    await Promise.race([
+      peakReached,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("twenty backward workers did not start")), 250)
+      )
+    ]);
+    await flushMicrotasks();
+
+    release();
+    const events = [];
+    while (true) {
+      const result = await iterator.next();
+      if (result.done) break;
+      events.push(result.value);
+    }
+    returned = true;
+
+    const progress = events.filter((event) => event.type === "work-progress");
+    const maxQueued = Math.max(0, ...progress.map((event) => event.queued));
+    const maxCentralQueued = Math.max(0, ...progress.map((event) => event.centralQueued));
+    const maxInlineQueued = Math.max(0, ...progress.map((event) => event.inlineQueued));
+    assert.equal(peakInFlight, maxWorkers);
+    assert.equal(requests, referencedWorks.length / 100);
+    assert.ok(progress.every((event) => event.queued === event.centralQueued + event.inlineQueued));
+    assert.ok(maxCentralQueued <= maxWorkers + 1);
+    assert.equal(maxInlineQueued, 0);
+    assert.ok(maxQueued <= (maxWorkers + 1) ** 2, `queued frontier reached ${maxQueued}`);
+  } finally {
+    release();
+    if (!returned) await iterator.return().catch(() => {});
+  }
+});
+
+test("counts bounded worker-local frontier while many seeds are stalled", async () => {
+  const maxWorkers = 20;
+  const chunksPerSeed = 25;
+  const seeds = Array.from({ length: maxWorkers }, (_, index) => ({
+    id: `SEED-${index + 1}`,
+    title: `Seed ${index + 1}`
+  }));
+  const referencedWorks = Array.from(
+    { length: chunksPerSeed * 100 },
+    (_, index) => `R${index + 1}`
+  );
+  let inFlight = 0;
+  let peakInFlight = 0;
+  let requests = 0;
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = () => resolve();
+  });
+  let resolvePeak;
+  const peakReached = new Promise((resolve) => {
+    resolvePeak = resolve;
+  });
+
+  const context = loadOpenAlex(async () => ({ results: [] }));
+  const provider = new context.OpenAlexProvider({
+    maxWorkers,
+    eventBufferSize: 2000,
+    includeForward: false,
+    includeBackward: true
+  });
+  provider.resolveSeed = async () => makeWork("SEED", referencedWorks);
+  provider.fetchBackwardChunk = async () => {
+    requests++;
+    inFlight++;
+    peakInFlight = Math.max(peakInFlight, inFlight);
+    if (peakInFlight === maxWorkers) resolvePeak();
+    await gate;
+    inFlight--;
+    return { results: [] };
+  };
+
+  const iterator = provider.streamSnowball(seeds);
+  let returned = false;
+  try {
+    assert.equal((await iterator.next()).value.type, "status");
+    assert.ok((await iterator.next()).value);
+
+    await Promise.race([
+      peakReached,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("twenty stalled workers did not start")), 250)
+      )
+    ]);
+
+    release();
+    const events = [];
+    while (true) {
+      const result = await iterator.next();
+      if (result.done) break;
+      events.push(result.value);
+    }
+    returned = true;
+
+    const progress = events.filter((event) => event.type === "work-progress");
+    const maxQueued = Math.max(0, ...progress.map((event) => event.queued));
+    assert.equal(peakInFlight, maxWorkers);
+    assert.equal(requests, seeds.length * chunksPerSeed);
+    assert.ok(progress.some((event) => event.inlineQueued > 0));
+    assert.ok(progress.every((event) => event.queued === event.centralQueued + event.inlineQueued));
+    assert.ok(maxQueued <= (maxWorkers + 1) ** 2);
+  } finally {
+    release();
+    if (!returned) await iterator.return().catch(() => {});
+  }
+});
+
+test("ordinary backward failures release every lazy source lane", async () => {
+  const maxWorkers = 20;
+  const chunks = maxWorkers + 3;
+  let requests = 0;
+  const context = loadOpenAlex(async () => ({ results: [] }));
+  const provider = new context.OpenAlexProvider({
+    maxWorkers,
+    eventBufferSize: 1000,
+    includeForward: false,
+    includeBackward: true
+  });
+  provider.resolveSeed = async () =>
+    makeWork(
+      "SEED",
+      Array.from({ length: chunks * 100 }, (_, index) => `R${index + 1}`)
+    );
+  provider.fetchBackwardChunk = async () => {
+    requests++;
+    throw new Error(`ordinary backward failure ${requests}`);
+  };
+
+  const events = await collectEvents(provider, [{ title: "Seed" }]);
+  assert.equal(requests, chunks);
+  assert.equal(
+    events.filter((event) => event.type === "status" && event.phase === "error").length,
+    chunks
+  );
+  assert.ok(events.some((event) => event.type === "status" && event.phase === "done"));
 });
 
 test("terminal stream errors drain buffered candidates in FIFO order before throwing", async () => {

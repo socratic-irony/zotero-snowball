@@ -48,7 +48,7 @@ var OpenAlexAsyncQueue = class {
     }
   }
 
-  push(value) {
+  tryPush(value) {
     if (this.closed || this.error) return false;
 
     const reader = this.readers.shift();
@@ -61,6 +61,13 @@ var OpenAlexAsyncQueue = class {
       this.values.push(value);
       return true;
     }
+
+    return false;
+  }
+
+  push(value) {
+    if (this.closed || this.error) return false;
+    if (this.tryPush(value)) return true;
 
     return new Promise((resolve) => {
       this.writers.push({ value, resolve });
@@ -518,12 +525,22 @@ var OpenAlexProvider = class {
     };
     if (signal?.aborted) return;
 
-    const jobs = new OpenAlexAsyncQueue();
+    // Keep the queued frontier bounded. Seeds are claimed lazily by workers;
+    // child jobs use a shared lazy source and bounded worker-local
+    // continuations when the frontier is full, so producers never wait for
+    // queue capacity or drop child work.
+    const frontierCapacity = this.maxWorkers + 1;
+    const maxInlineJobsPerWorker = frontierCapacity;
+    const maxFrontierJobs = frontierCapacity * frontierCapacity;
+    const jobs = new OpenAlexAsyncQueue(frontierCapacity);
     const events = new OpenAlexAsyncQueue(this.eventBufferSize);
     const requestController = new AbortController();
     const requestSignal = requestController.signal;
     const workers = [];
+    let nextSeedIndex = 0;
     let queuedJobs = 0;
+    let inlineJobCount = 0;
+    let frontierJobs = 0;
     let activeJobs = 0;
     let pendingJobs = 0;
     let completedJobs = 0;
@@ -538,7 +555,12 @@ var OpenAlexProvider = class {
     const emitProgress = async (seed) =>
       pushEvent({
         type: "work-progress",
-        queued: queuedJobs,
+        // queued is the total waiting frontier, including worker-local
+        // continuations; the split fields keep the scheduler observable.
+        queued: frontierJobs,
+        centralQueued: queuedJobs,
+        inlineQueued: inlineJobCount,
+        frontierLimit: maxFrontierJobs,
         active: activeJobs,
         pending: pendingJobs,
         completed: completedJobs,
@@ -566,16 +588,113 @@ var OpenAlexProvider = class {
     const abortHandler = () => abort();
     signal?.addEventListener("abort", abortHandler, { once: true });
 
-    const enqueue = (job) => {
+    const scheduleJob = (job, workerState) => {
       if (terminal || requestSignal.aborted) return false;
-      pendingJobs++;
-      queuedJobs++;
-      if (!jobs.push(job)) {
-        pendingJobs--;
-        queuedJobs--;
-        return false;
+
+      if (jobs.tryPush(job)) {
+        pendingJobs++;
+        queuedJobs++;
+        frontierJobs++;
+        return true;
       }
+
+      if (!workerState) {
+        throw new Error("OpenAlex job scheduled without worker state.");
+      }
+      if (workerState.inlineJobs.length >= maxInlineJobsPerWorker) {
+        throw new Error("OpenAlex worker-local frontier capacity exceeded.");
+      }
+
+      pendingJobs++;
+      inlineJobCount++;
+      frontierJobs++;
+      workerState.inlineJobs.push(job);
       return true;
+    };
+
+    const claimSeedJob = () => {
+      if (terminal || requestSignal.aborted || nextSeedIndex >= seeds.length) return null;
+      const seedIndex = nextSeedIndex++;
+      pendingJobs++;
+      return { kind: "resolve", seed: seeds[seedIndex], seedIndex };
+    };
+
+    const takeJob = async () => {
+      const seedJob = claimSeedJob();
+      if (seedJob) {
+        return {
+          result: { value: seedJob, done: false },
+          queued: false
+        };
+      }
+
+      return { result: await jobs.next(), queued: true };
+    };
+
+    const makeForwardJob = (seed, seedIndex, openAlexID) => ({
+      kind: "forward",
+      seed,
+      seedIndex,
+      openAlexID,
+      cursor: "*",
+      visitedCursors: new Set(["*"])
+    });
+
+    const makeBackwardSource = (seed, seedIndex, ids, forwardJob) => ({
+      seed,
+      seedIndex,
+      ids,
+      nextOffset: 0,
+      inFlight: 0,
+      forwardJob,
+      forwardScheduled: false
+    });
+
+    const claimBackwardJob = (source) => {
+      if (source.nextOffset >= source.ids.length) return null;
+      const start = source.nextOffset;
+      source.nextOffset += OPENALEX_BACKWARD_CHUNK_SIZE;
+      source.inFlight++;
+      return {
+        kind: "backward",
+        seed: source.seed,
+        seedIndex: source.seedIndex,
+        ids: source.ids.slice(start, start + OPENALEX_BACKWARD_CHUNK_SIZE),
+        source
+      };
+    };
+
+    const scheduleSourceContinuation = (source, workerState) => {
+      const nextJob = claimBackwardJob(source);
+      if (nextJob) {
+        if (!scheduleJob(nextJob, workerState)) source.inFlight--;
+        return !!nextJob;
+      }
+
+      if (source.inFlight !== 0 || source.forwardScheduled || !source.forwardJob) {
+        return true;
+      }
+
+      source.forwardScheduled = true;
+      return scheduleJob(source.forwardJob, workerState);
+    };
+
+    const scheduleInitialBackwardJobs = (source, workerState) => {
+      for (let i = 0; i < this.maxWorkers; i++) {
+        const job = claimBackwardJob(source);
+        if (!job) break;
+        if (!scheduleJob(job, workerState)) {
+          source.inFlight--;
+          break;
+        }
+      }
+
+      if (source.forwardJob && !source.forwardScheduled) {
+        source.forwardScheduled = true;
+        scheduleJob(source.forwardJob, workerState);
+      } else if (source.inFlight === 0) {
+        scheduleSourceContinuation(source, workerState);
+      }
     };
 
     const emitCandidates = async (results, direction, seed) => {
@@ -587,7 +706,7 @@ var OpenAlexProvider = class {
       return true;
     };
 
-    const executeJob = async (job) => {
+    const executeJob = async (job, workerState) => {
       const label = this.shortSeedLabel(job.seed) || "seed";
 
       if (job.kind === "resolve") {
@@ -625,26 +744,16 @@ var OpenAlexProvider = class {
 
         if (this.includeBackward) {
           const ids = this.normalizeReferencedWorks(work.referenced_works);
-          for (const chunk of SnowballUtil.chunk(ids, OPENALEX_BACKWARD_CHUNK_SIZE)) {
-            enqueue({
-              kind: "backward",
-              seed: job.seed,
-              seedIndex: job.seedIndex,
-              ids: chunk
-            });
-          }
-        }
-
-        if (this.includeForward) {
+          const forwardJob =
+            this.includeForward && this.shortOpenAlexID(work.id)
+              ? makeForwardJob(job.seed, job.seedIndex, this.shortOpenAlexID(work.id))
+              : null;
+          const source = makeBackwardSource(job.seed, job.seedIndex, ids, forwardJob);
+          scheduleInitialBackwardJobs(source, workerState);
+        } else if (this.includeForward) {
           const openAlexID = this.shortOpenAlexID(work.id);
           if (openAlexID) {
-            enqueue({
-              kind: "forward",
-              seed: job.seed,
-              seedIndex: job.seedIndex,
-              openAlexID,
-              cursor: "*"
-            });
+            scheduleJob(makeForwardJob(job.seed, job.seedIndex, openAlexID), workerState);
           }
         }
         return;
@@ -666,19 +775,31 @@ var OpenAlexProvider = class {
 
         const nextCursor = response?.meta?.next_cursor || null;
         if (!terminal && !requestSignal.aborted && nextCursor) {
-          enqueue({
-            kind: "forward",
-            seed: job.seed,
-            seedIndex: job.seedIndex,
-            openAlexID: job.openAlexID,
-            cursor: nextCursor
-          });
+          const cursorKey = String(nextCursor);
+          if (!job.visitedCursors.has(cursorKey)) {
+            job.visitedCursors.add(cursorKey);
+            scheduleJob(
+              {
+                ...job,
+                cursor: nextCursor
+              },
+              workerState
+            );
+          }
         }
       }
     };
 
     const maybeFinish = async () => {
-      if (terminal || finishing || pendingJobs !== 0 || activeJobs !== 0) return;
+      if (
+        terminal ||
+        finishing ||
+        nextSeedIndex < seeds.length ||
+        pendingJobs !== 0 ||
+        activeJobs !== 0
+      ) {
+        return;
+      }
       finishing = true;
       jobs.close();
       if (!(await pushEvent({ type: "status", phase: "done", message: "Done" }))) return;
@@ -687,51 +808,67 @@ var OpenAlexProvider = class {
       events.close();
     };
 
-    const runWorker = async () => {
-      while (!terminal) {
-        let result;
-        try {
-          result = await jobs.next();
-        } catch (error) {
-          if (terminal || requestSignal.aborted || error?.name === "AbortError") return;
-          fail(error);
-          return;
-        }
-        if (result.done || terminal) return;
-
-        const job = result.value;
+    const runJob = async (job, workerState, queued) => {
+      if (queued) {
         queuedJobs--;
-        activeJobs++;
-        try {
-          if (!(await emitProgress(job.seed))) return;
-          await executeJob(job);
-        } catch (error) {
-          if (error?.name === "AbortError" || requestSignal.aborted) {
-            abort();
-          } else if (OpenAlexProvider.isTerminalOpenAlexError(error)) {
-            fail(error);
-          } else if (!terminal) {
-            const kind = job.kind === "resolve" ? "seed resolution" : `${job.kind} crawl`;
-            await emitStatus(
-              "error",
-              `${kind} failed for ${this.shortSeedLabel(job.seed) || "seed"}; continuing.`
-            );
-            this.debug(`${kind} failed: ${error}`);
-          }
-        } finally {
-          activeJobs--;
-          pendingJobs--;
-          completedJobs++;
-          if (!terminal) {
-            if (await emitProgress(job.seed)) await maybeFinish();
-          }
+        frontierJobs--;
+      }
+      activeJobs++;
+      try {
+        if (!(await emitProgress(job.seed))) return;
+        await executeJob(job, workerState);
+      } catch (error) {
+        if (error?.name === "AbortError" || requestSignal.aborted) {
+          abort();
+        } else if (OpenAlexProvider.isTerminalOpenAlexError(error)) {
+          fail(error);
+        } else if (!terminal) {
+          const kind = job.kind === "resolve" ? "seed resolution" : `${job.kind} crawl`;
+          await emitStatus(
+            "error",
+            `${kind} failed for ${this.shortSeedLabel(job.seed) || "seed"}; continuing.`
+          );
+          this.debug(`${kind} failed: ${error}`);
+        }
+      } finally {
+        if (job.kind === "backward" && !terminal && !requestSignal.aborted) {
+          job.source.inFlight--;
+          scheduleSourceContinuation(job.source, workerState);
+        }
+        activeJobs--;
+        pendingJobs--;
+        completedJobs++;
+        if (!terminal) {
+          if (await emitProgress(job.seed)) await maybeFinish();
         }
       }
     };
 
-    for (let i = 0; i < seeds.length; i++) {
-      enqueue({ kind: "resolve", seed: seeds[i], seedIndex: i });
-    }
+    const runWorker = async () => {
+      const workerState = { inlineJobs: [] };
+      while (!terminal) {
+        let job;
+        let queued = false;
+        if (workerState.inlineJobs.length > 0) {
+          job = workerState.inlineJobs.shift();
+          inlineJobCount--;
+          frontierJobs--;
+        } else {
+          let next;
+          try {
+            next = await takeJob();
+          } catch (error) {
+            if (terminal || requestSignal.aborted || error?.name === "AbortError") return;
+            fail(error);
+            return;
+          }
+          if (next.result.done || terminal) return;
+          job = next.result.value;
+          queued = next.queued;
+        }
+        await runJob(job, workerState, queued);
+      }
+    };
 
     for (let i = 0; i < this.maxWorkers && !terminal; i++) {
       workers.push(runWorker());
@@ -791,8 +928,12 @@ var OpenAlexProvider = class {
     if (!openAlexID) return;
 
     let cursor = "*";
+    const visitedCursors = new Set();
 
     while (cursor) {
+      const cursorKey = String(cursor);
+      if (visitedCursors.has(cursorKey)) return;
+      visitedCursors.add(cursorKey);
       if (signal?.aborted) return;
       const response = await this.fetchForwardPage(openAlexID, cursor, signal);
       const results = Array.isArray(response?.results) ? response.results : [];
