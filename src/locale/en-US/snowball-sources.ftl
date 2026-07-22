@@ -17,3 +17,7 @@ snowball-sources-button-add-selected =
 
 snowball-sources-button-cancel =
     .label = Cancel
+
+snowball-sources-search-mode-help =
+    Exhaustive search is the default and follows all available citation results.
+    Limit results is an early-stop sample and does not guarantee the global top N.

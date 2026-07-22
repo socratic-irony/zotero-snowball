@@ -13,6 +13,7 @@ Find one-hop **backward references** and **forward citations** for the items alr
 ## Features
 
 - **One-click snowballing** from the Zotero item or collection context menu — or from `Tools → Snowball Sources…`.
+- **Exhaustive by default**: follow all available backward references and forward-citation pages, with an opt-in early-stop sample capped at 1,000 unique candidates.
 - **Streaming review dialog** opens immediately with a spinner and populates rows as candidates arrive. **Stop** any time without losing what's already loaded.
 - **Sortable, filterable table** with sticky headers, alternating row colors, and a draggable splitter between the candidate list and the per-row details/abstract pane.
 - **Filters**: live text search across title/authors/venue, direction (backward/forward/both), and "hide items already in library."
@@ -46,10 +47,13 @@ See [Development](#development).
 ### Snowball selected items
 
 1. In Zotero, select one or more regular items (with DOIs ideally — items resolve more reliably with one).
-2. Right-click → **Snowball Sources for Selected Item(s)**.
-3. The review dialog opens immediately. You'll see "Searching…" while seeds are being resolved on OpenAlex; rows start streaming in once the first reference list comes back.
-4. Sort, filter, and check/uncheck rows. Click any row to see its abstract.
-5. Click **Add Selected to Zotero** when you're done.
+2. In **Snowball Sources Preferences**, enter your own OpenAlex API key. No project key is bundled, and searches without a key are blocked before network traffic.
+3. Right-click → **Snowball Sources for Selected Item(s)**.
+4. The review dialog opens immediately. You'll see "Searching…" while seeds are being resolved on OpenAlex; rows start streaming in once the first reference list comes back.
+5. Sort, filter, and check/uncheck rows. Click any row to see its abstract.
+6. Click **Add Selected to Zotero** when you're done.
+
+Exhaustive search is the default and may consume substantial OpenAlex quota. Enable **Limit results** in Preferences to stop after the configured number of unique candidates; this is an early-stop sample and does not guarantee the globally highest-ranked papers.
 
 ### Snowball a whole collection
 
@@ -87,25 +91,24 @@ Added items are tagged automatically:
 
 `Tools → Snowball Sources Preferences…`
 
-| Pref name                                          | Default | Range / notes                                                  |
-| -------------------------------------------------- | ------- | -------------------------------------------------------------- |
-| `extensions.snowballSources.openAlexAPIKey`        | `""`    | Optional. Joins OpenAlex's polite pool for higher reliability. |
-| `extensions.snowballSources.semanticScholarAPIKey` | `""`    | Optional. Reserved for future enrichment; not yet called.      |
-| `extensions.snowballSources.includeForward`        | `true`  | Fetch papers that **cite** each seed.                          |
-| `extensions.snowballSources.includeBackward`       | `true`  | Fetch papers each seed **references**.                         |
-| `extensions.snowballSources.skipAlreadyInLibrary`  | `true`  | Uncheck candidates already in library by default.              |
-| `extensions.snowballSources.downloadPDFs`          | `false` | Opt in to PDF downloads from third-party publisher hosts.      |
-| `extensions.snowballSources.maxSeeds`              | `50`    | 1–500.                                                         |
-| `extensions.snowballSources.maxForwardPerSeed`     | `100`   | 0–1000.                                                        |
-| `extensions.snowballSources.maxBackwardPerSeed`    | `100`   | 0–1000.                                                        |
-| `extensions.snowballSources.maxCandidatesTotal`    | `500`   | 1–10000. Hard cap across all seeds combined.                   |
-| `extensions.snowballSources.requestTimeoutMs`      | `30000` | 1000–120000. Per-request timeout (ms).                         |
+| Pref name                                          | Default | Range / notes                                                         |
+| -------------------------------------------------- | ------- | --------------------------------------------------------------------- |
+| `extensions.snowballSources.openAlexAPIKey`        | `""`    | Required. Enter your own key; no project key is bundled.              |
+| `extensions.snowballSources.semanticScholarAPIKey` | `""`    | Optional. Reserved for future enrichment; not yet called.             |
+| `extensions.snowballSources.limitResults`          | `false` | Exhaustive by default; enable to stop early at the total-result limit. |
+| `extensions.snowballSources.includeForward`        | `true`  | Fetch papers that **cite** each seed.                                 |
+| `extensions.snowballSources.includeBackward`       | `true`  | Fetch papers each seed **references**.                                |
+| `extensions.snowballSources.skipAlreadyInLibrary`  | `true`  | Uncheck candidates already in library by default.                     |
+| `extensions.snowballSources.downloadPDFs`          | `false` | Opt in to PDF downloads from third-party publisher hosts.             |
+| `extensions.snowballSources.maxSeeds`              | `50`    | 1–500.                                                                |
+| `extensions.snowballSources.maxCandidatesTotal`    | `1000`  | 1–10000; used only when `limitResults` is enabled.                    |
+| `extensions.snowballSources.requestTimeoutMs`      | `30000` | 1000–120000.                                                          |
 
 Out-of-range values are clamped on save and you'll be shown a confirmation dialog listing what was adjusted.
 
 ### API keys
 
-API keys are stored in Zotero's prefs file like any other Zotero pref (plain text, profile-local). They are sent **only** to the host that owns them (`api.openalex.org` / `api.semanticscholar.org`) and are scrubbed from every debug-log line by the [`SnowballLog`](src/chrome/content/modules/log.js) module. The list of secret-bearing parameter names is `api_key`, `apikey`, `key`, `token`, `x-api-key`, plus any `Authorization: Bearer …` header.
+OpenAlex searches require users to obtain and enter their own key; the distributed source and install defaults contain no OpenAlex credential. API keys are stored in Zotero's prefs file like any other Zotero pref (plain text, profile-local). They are sent **only** to the host that owns them (`api.openalex.org` / `api.semanticscholar.org`) and are scrubbed from every debug-log line by the [`SnowballLog`](src/chrome/content/modules/log.js) module. The list of secret-bearing parameter names is `api_key`, `apikey`, `key`, `token`, `x-api-key`, plus any `Authorization: Bearer …` header.
 
 ---
 

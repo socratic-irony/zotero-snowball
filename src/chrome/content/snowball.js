@@ -336,19 +336,27 @@ var SnowballSourcesPlugin = class {
     }
 
     try {
+      const apiKey = this.prefStr("openAlexAPIKey", "").trim();
+      if (!apiKey) {
+        this.alert(
+          "Enter your OpenAlex API key in Snowball Sources Preferences before searching."
+        );
+        return;
+      }
+
       const maxSeeds = this.prefInt("maxSeeds", 50, 1, 500);
       const seeds = regularItems.slice(0, maxSeeds);
       const target = SnowballZoteroItems.getTargetContext(seeds, explicitCollection);
       const seedRecords = SnowballZoteroItems.extractSeedRecords(seeds);
 
       const providerConfig = {
-        apiKey: this.prefStr("openAlexAPIKey", ""),
+        apiKey,
         // Semantic Scholar enrichment is opt-in: empty key disables it
         // entirely (no S2 traffic will be initiated by the dialog).
         semanticScholarAPIKey: this.prefStr("semanticScholarAPIKey", ""),
-        maxForwardPerSeed: this.prefInt("maxForwardPerSeed", 100, 0, 1000),
-        maxBackwardPerSeed: this.prefInt("maxBackwardPerSeed", 100, 0, 1000),
-        maxCandidatesTotal: this.prefInt("maxCandidatesTotal", 500, 1, 10000),
+        limitResults: this.prefBool("limitResults", false),
+        maxCandidatesTotal: this.prefInt("maxCandidatesTotal", 1000, 1, 10000),
+        maxWorkers: 20,
         timeoutMs: this.prefInt("requestTimeoutMs", 30000, 1000, 120000),
         includeForward: this.prefBool("includeForward", true),
         includeBackward: this.prefBool("includeBackward", true)

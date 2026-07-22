@@ -1,9 +1,10 @@
 pref("extensions.snowballSources.openAlexAPIKey", "");
 pref("extensions.snowballSources.semanticScholarAPIKey", "");
+pref("extensions.snowballSources.limitResults", false);
 pref("extensions.snowballSources.maxSeeds", 50);
 pref("extensions.snowballSources.maxForwardPerSeed", 100);
 pref("extensions.snowballSources.maxBackwardPerSeed", 100);
-pref("extensions.snowballSources.maxCandidatesTotal", 500);
+pref("extensions.snowballSources.maxCandidatesTotal", 1000);
 pref("extensions.snowballSources.includeForward", true);
 pref("extensions.snowballSources.includeBackward", true);
 pref("extensions.snowballSources.defaultSort", "relevance");

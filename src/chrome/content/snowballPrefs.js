@@ -9,14 +9,13 @@ var SnowballPrefs = {
   schema: {
     openAlexAPIKey: { type: "string", default: "", maxLength: 256 },
     semanticScholarAPIKey: { type: "string", default: "", maxLength: 256 },
+    limitResults: { type: "boolean", default: false },
     includeForward: { type: "boolean", default: true },
     includeBackward: { type: "boolean", default: true },
     skipAlreadyInLibrary: { type: "boolean", default: true },
     downloadPDFs: { type: "boolean", default: false },
     maxSeeds: { type: "number", default: 50, min: 1, max: 500 },
-    maxForwardPerSeed: { type: "number", default: 100, min: 0, max: 1000 },
-    maxBackwardPerSeed: { type: "number", default: 100, min: 0, max: 1000 },
-    maxCandidatesTotal: { type: "number", default: 500, min: 1, max: 10000 },
+    maxCandidatesTotal: { type: "number", default: 1000, min: 1, max: 10000 },
     requestTimeoutMs: { type: "number", default: 30000, min: 1000, max: 120000 },
     minCitedBy: { type: "number", default: 0, min: 0, max: 100000 },
     // Column visibility. Pref names match the dialog's table column ids.
@@ -87,6 +86,8 @@ var SnowballPrefs = {
         });
       }
 
+      this.updateLimitResultsControl();
+
       // Build the weight-slider rows.
       this._renderWeightControls();
     } catch (error) {
@@ -104,6 +105,9 @@ var SnowballPrefs = {
 
   bindControls() {
     document
+      .getElementById("pref-limitResults")
+      ?.addEventListener("change", () => this.updateLimitResultsControl());
+    document
       .getElementById("snowball-weights-reset")
       ?.addEventListener("click", () => this.resetWeights());
     document
@@ -113,6 +117,13 @@ var SnowballPrefs = {
     document
       .getElementById("snowball-prefs-save-anyway")
       ?.addEventListener("command", () => this.saveConfirmed());
+  },
+
+  updateLimitResultsControl() {
+    const checkbox = document.getElementById("pref-limitResults");
+    const limitInput = document.getElementById("pref-maxCandidatesTotal");
+    if (!checkbox || !limitInput) return;
+    limitInput.disabled = !checkbox.checked;
   },
 
   /**

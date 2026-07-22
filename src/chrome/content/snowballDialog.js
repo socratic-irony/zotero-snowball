@@ -13,6 +13,8 @@ var SnowballDialog = {
   // Trigram-Jaccard threshold above which two same-year candidates count as duplicates
   TRIGRAM_DEDUPE_THRESHOLD: 0.85,
   abortController: null,
+  loadingWasCanceled: false,
+  limitWasReached: false,
   loading: false,
   pendingRefresh: null,
   // Resolved seed Works (from OpenAlex) accumulated as `seed-resolved` events arrive.
@@ -115,8 +117,20 @@ var SnowballDialog = {
   // ---------- Streaming ----------------------------------------------------
 
   async startStreaming() {
+    this.loadingWasCanceled = false;
+    this.limitWasReached = false;
     this.setLoading(true);
     this.setStatus("Starting…");
+
+    const apiKey = String(this.args.providerConfig?.apiKey || "").trim();
+    if (!apiKey) {
+      this.setLoading(false);
+      this.setStatus("OpenAlex API key required");
+      this.setProgress(
+        "Enter your OpenAlex API key in Snowball Sources Preferences before searching."
+      );
+      return;
+    }
 
     let provider;
     try {
@@ -138,7 +152,12 @@ var SnowballDialog = {
 
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
-    const maxTotal = this.args.providerConfig?.maxCandidatesTotal || 500;
+    const limitResults = this.args.providerConfig?.limitResults === true;
+    const configuredMaxTotal = Number(this.args.providerConfig?.maxCandidatesTotal);
+    const maxTotal =
+      Number.isFinite(configuredMaxTotal) && configuredMaxTotal >= 1
+        ? Math.trunc(configuredMaxTotal)
+        : 1000;
     const skipExisting = this.args.flags?.skipAlreadyInLibrary !== false;
     const libraryID = this.args.target?.libraryID;
 
@@ -172,15 +191,18 @@ var SnowballDialog = {
         }
 
         if (event.type === "candidate") {
-          if (added >= maxTotal) {
-            this.abortController.abort();
-            break;
-          }
           const wasNew = await this.ingestCandidate(event.candidate, {
             libraryID,
             skipExisting
           });
-          if (wasNew) added++;
+          if (wasNew) {
+            added++;
+            if (limitResults && added >= maxTotal) {
+              this.limitWasReached = true;
+              this.abortController.abort();
+              break;
+            }
+          }
           this.scheduleRefresh();
         }
       }
@@ -220,10 +242,15 @@ var SnowballDialog = {
       this.setLoading(false);
       this.flushRefresh();
       const total = this.candidates.length;
-      if (signal.aborted && this.loadingWasCanceled) {
+      if (this.limitWasReached) {
+        this.setStatus("Limit reached");
+        this.setProgress(`Limit reached — ${total} candidate${total === 1 ? "" : "s"} loaded`);
+      } else if (signal.aborted) {
+        this.setStatus("Stopped");
         this.setProgress(`Stopped — ${total} candidate${total === 1 ? "" : "s"} loaded`);
       } else {
-        this.setProgress(`Done — ${total} candidate${total === 1 ? "" : "s"}`);
+        this.setStatus("Done");
+        this.setProgress(`Done — ${total} candidate${total === 1 ? "" : "s"} loaded`);
       }
       // First candidate selected once everything settles, if nothing picked.
       if (this.state.selectedIndex < 0) {

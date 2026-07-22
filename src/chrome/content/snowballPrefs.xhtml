@@ -13,13 +13,17 @@
   <script src="chrome://snowball-sources/content/modules/errors.js"/>
   <script src="chrome://snowball-sources/content/snowballPrefs.js"/>
 
+  <linkset>
+    <html:link rel="localization" href="snowball-sources.ftl"/>
+  </linkset>
+
   <vbox flex="1" class="snowball-prefs">
     <html:section>
       <html:h2>API Keys</html:h2>
       <html:p class="hint">
-        Optional. OpenAlex works without a key but recommends one for sustained use;
-        a Semantic Scholar key unlocks higher rate limits and (in future) abstract
-        enrichment for candidates that don't have one from OpenAlex.
+        OpenAlex searches require your own API key. Obtain one from OpenAlex and enter it
+        below; no project key is bundled. A Semantic Scholar key is optional and reserved
+        for future abstract enrichment.
       </html:p>
 
       <html:label class="row">
@@ -47,6 +51,16 @@
       </html:label>
 
       <html:label class="row inline">
+        <html:input id="pref-limitResults" type="checkbox"/>
+        <html:span>Limit results and stop after the configured number of unique candidates</html:span>
+      </html:label>
+
+      <html:p class="hint" data-l10n-id="snowball-sources-search-mode-help">
+        Exhaustive search is the default and follows all available citation results.
+        Limit results is an early-stop sample and does not guarantee the global top N.
+      </html:p>
+
+      <html:label class="row inline">
         <html:input id="pref-skipAlreadyInLibrary" type="checkbox"/>
         <html:span>Uncheck candidates already in your library by default</html:span>
       </html:label>
@@ -66,18 +80,9 @@
       </html:label>
 
       <html:label class="row">
-        <html:span class="label">Max backward references per seed</html:span>
-        <html:input id="pref-maxBackwardPerSeed" type="number" min="0" max="1000"/>
-      </html:label>
-
-      <html:label class="row">
-        <html:span class="label">Max forward citations per seed</html:span>
-        <html:input id="pref-maxForwardPerSeed" type="number" min="0" max="1000"/>
-      </html:label>
-
-      <html:label class="row">
-        <html:span class="label">Max total candidates</html:span>
-        <html:input id="pref-maxCandidatesTotal" type="number" min="1" max="10000"/>
+        <html:span class="label">Limit after unique candidates</html:span>
+        <html:input id="pref-maxCandidatesTotal" type="number" min="1" max="10000"
+                    disabled="disabled"/>
       </html:label>
 
       <html:label class="row">
