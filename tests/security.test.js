@@ -99,6 +99,36 @@ test("SnowballHTTP.assertSafeURL accepts allowlisted hosts", () => {
   }
 });
 
+test("SnowballHTTP.fetchJSON rejects provider redirects at the HTTP boundary", async () => {
+  const calls = [];
+  const ctx = loadScripts(["log.js", "errors.js", "http.js"], {
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        status: 302,
+        ok: false,
+        headers: { get: () => "https://evil.example/" }
+      };
+    }
+  });
+
+  let error;
+  try {
+    await ctx.SnowballHTTP.fetchJSON("https://api.openalex.org/works", { maxRetries: 4 });
+  } catch (caught) {
+    error = caught;
+  }
+
+  assert.ok(error, "redirect response must reject");
+  assert.equal(error.code, "HTTP_REDIRECT");
+  assert.equal(error.context.origin, "https://api.openalex.org");
+  assert.equal(error.context.status, 302);
+  assert.equal(Object.keys(error.context).length, 2, "redirect context must stay minimal");
+  assert.equal(calls.length, 1, "redirects must not be retried or followed");
+  assert.equal(calls[0].options.redirect, "manual");
+  assert.ok(!JSON.stringify(error).includes("evil.example"), "redirect target must not leak");
+});
+
 test("SnowballZoteroItems.safeAttachmentURL canonicalizes public HTTPS URLs", () => {
   const ctx = loadScripts(["zoteroItems.js"]);
   const input = "https://Publisher.Example.org:443/papers/a%20b.pdf?download=1#page=2";

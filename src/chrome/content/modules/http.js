@@ -132,7 +132,7 @@ var SnowballHTTP = {
           headers: Object.assign({ Accept: "application/json" }, headers),
           body: body !== null && body !== undefined ? body : undefined,
           credentials: "omit",
-          redirect: "follow",
+          redirect: "manual",
           signal: composed.signal
         });
       } catch (error) {
@@ -168,6 +168,15 @@ var SnowballHTTP = {
       } finally {
         composed.dispose();
         clearTimeout(timer);
+      }
+
+      if (response.status >= 300 && response.status < 400) {
+        throw new SnowballError("HTTP_REDIRECT", "The provider returned a redirect.", {
+          context: {
+            origin: SnowballLog.scrub(safeURL.origin),
+            status: response.status
+          }
+        });
       }
 
       // Response received — decide whether to retry on status.
