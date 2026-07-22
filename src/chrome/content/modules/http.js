@@ -110,7 +110,8 @@ var SnowballHTTP = {
         waiters: [],
         blockedUntil: 0,
         pumping: false,
-        pumpPromise: null
+        pumpPromise: null,
+        pumpDelayController: null
       };
       this._hostStates.set(hostname, state);
     }
@@ -146,6 +147,7 @@ var SnowballHTTP = {
         if (index >= 0) state.waiters.splice(index, 1);
         cleanup();
         reject(new DOMException("aborted", "AbortError"));
+        if (state.waiters.length === 0) state.pumpDelayController?.abort();
       };
 
       if (signal) {
@@ -191,7 +193,7 @@ var SnowballHTTP = {
             // This delay is shared by the pump. Individual waiter aborts are
             // handled by their own listeners and remove themselves from the
             // queue without canceling other callers' wait.
-            await this._delay(waitMs);
+            await this._waitForHostGateDelay(state, waitMs);
             continue;
           }
 
@@ -216,6 +218,18 @@ var SnowballHTTP = {
         if (state.waiters.length > 0) this._pumpHostGate(hostname);
       }
     })();
+  },
+
+  async _waitForHostGateDelay(state, waitMs) {
+    const controller = new AbortController();
+    state.pumpDelayController = controller;
+    try {
+      await this._delay(waitMs, controller.signal);
+    } catch (error) {
+      if (!controller.signal.aborted) throw error;
+    } finally {
+      if (state.pumpDelayController === controller) state.pumpDelayController = null;
+    }
   },
 
   _resolveHostWaiter(waiter) {
