@@ -6,6 +6,63 @@ const OPENALEX_MAX_ABSTRACT_ENTRIES = 10_000;
 const OPENALEX_MAX_ABSTRACT_LENGTH = 8_000;
 const OPENALEX_MAX_AUTHORS = 100;
 const OPENALEX_MAX_AUTHOR_NAME_LENGTH = 256;
+const OPENALEX_BACKWARD_CHUNK_SIZE = 100;
+const OPENALEX_MAX_WORKERS = 20;
+const OPENALEX_MAX_SEED_LABEL_LENGTH = 160;
+
+var OpenAlexAsyncQueue = class {
+  constructor() {
+    this.values = [];
+    this.readers = [];
+    this.closed = false;
+    this.error = null;
+  }
+
+  push(value) {
+    if (this.closed || this.error) return false;
+
+    const reader = this.readers.shift();
+    if (reader) {
+      reader.resolve({ value, done: false });
+    } else {
+      this.values.push(value);
+    }
+    return true;
+  }
+
+  close() {
+    if (this.closed || this.error) return;
+    this.closed = true;
+    for (const reader of this.readers.splice(0)) {
+      reader.resolve({ value: undefined, done: true });
+    }
+  }
+
+  fail(error) {
+    if (this.closed || this.error) return;
+    this.error = error || new Error("Async queue failed.");
+    this.values.length = 0;
+    for (const reader of this.readers.splice(0)) {
+      reader.reject(this.error);
+    }
+  }
+
+  next() {
+    if (this.error) return Promise.reject(this.error);
+    if (this.values.length > 0) {
+      return Promise.resolve({ value: this.values.shift(), done: false });
+    }
+    if (this.closed) return Promise.resolve({ value: undefined, done: true });
+
+    return new Promise((resolve, reject) => {
+      this.readers.push({ resolve, reject });
+    });
+  }
+
+  [Symbol.asyncIterator]() {
+    return this;
+  }
+};
 
 var OpenAlexProvider = class {
   static clampInt(value, min, max, fallback) {
@@ -21,6 +78,7 @@ var OpenAlexProvider = class {
     includeForward = true,
     includeBackward = true,
     maxCandidatesTotal = 500,
+    maxWorkers = OPENALEX_MAX_WORKERS,
     timeoutMs = 30000
   } = {}) {
     this.baseURL = "https://api.openalex.org";
@@ -29,9 +87,17 @@ var OpenAlexProvider = class {
     this.apiKey = String(apiKey || "").trim();
     // Clamp every limit so a malformed pref can't cause runaway memory or
     // request storms.
+    // Retain legacy options for callers of the batch API. streamSnowball()
+    // intentionally ignores per-seed acquisition limits.
     this.maxForwardPerSeed = OpenAlexProvider.clampInt(maxForwardPerSeed, 0, 1000, 100);
     this.maxBackwardPerSeed = OpenAlexProvider.clampInt(maxBackwardPerSeed, 0, 1000, 100);
     this.maxCandidatesTotal = OpenAlexProvider.clampInt(maxCandidatesTotal, 1, 10000, 500);
+    this.maxWorkers = OpenAlexProvider.clampInt(
+      maxWorkers,
+      1,
+      OPENALEX_MAX_WORKERS,
+      OPENALEX_MAX_WORKERS
+    );
     this.timeoutMs = OpenAlexProvider.clampInt(timeoutMs, 1000, 120000, 30000);
     this.includeForward = !!includeForward;
     this.includeBackward = !!includeBackward;
@@ -54,6 +120,8 @@ var OpenAlexProvider = class {
     ].join(",");
   }
 
+  // Legacy batch API. The UI uses streamSnowball(), whose shared consumer
+  // owns unique-candidate limits and whose traversal is always exhaustive.
   async snowball(seedRecords) {
     const allCandidates = [];
     const resolvedSeeds = [];
@@ -135,9 +203,9 @@ var OpenAlexProvider = class {
     }
   }
 
-  async getBackwardReferences(seed, work) {
-    const ids = (work.referenced_works || []).slice(0, this.maxBackwardPerSeed);
-    const works = await this.batchGetWorksByOpenAlexIDs(ids);
+  async getBackwardReferences(seed, work, signal = null) {
+    const ids = this.normalizeReferencedWorks(work?.referenced_works);
+    const works = await this.batchGetWorksByOpenAlexIDs(ids, signal);
 
     return works.map((candidate) =>
       this.normalizeCandidate(candidate, {
@@ -147,51 +215,37 @@ var OpenAlexProvider = class {
     );
   }
 
-  async getForwardCitations(seed, work) {
-    const openAlexID = this.shortOpenAlexID(work.id);
-    if (!openAlexID) {
-      return [];
-    }
-
-    const url = new URL(`${this.baseURL}/works`);
-    url.searchParams.set("filter", `cites:${openAlexID}`);
-    url.searchParams.set("per_page", String(Math.min(this.maxForwardPerSeed, 100)));
-    url.searchParams.set("select", this.fields);
-    this.addAuth(url);
-
+  async getForwardCitations(seed, work, signal = null) {
+    const candidates = [];
     try {
-      const response = await this.fetchJSON(url);
-      const results = response.results || [];
-
-      return results.map((candidate) =>
-        this.normalizeCandidate(candidate, {
-          direction: "forward",
-          seed
-        })
-      );
+      for await (const candidate of this.streamForward(seed, work, signal)) {
+        candidates.push(candidate);
+      }
     } catch (error) {
-      this.debug(`Forward citation lookup failed for ${openAlexID}: ${error}`);
-      return [];
+      if (error?.name === "AbortError") throw error;
+      this.debug(`Forward citation lookup failed for ${this.shortOpenAlexID(work?.id)}: ${error}`);
     }
+    return candidates;
   }
 
-  async batchGetWorksByOpenAlexIDs(ids) {
-    const cleanIDs = ids.map((id) => this.shortOpenAlexID(id)).filter(Boolean);
+  async batchGetWorksByOpenAlexIDs(ids, signal = null) {
+    const cleanIDs = this.normalizeReferencedWorks(ids);
 
-    const chunks = SnowballUtil.chunk(cleanIDs, 100);
+    const chunks = SnowballUtil.chunk(cleanIDs, OPENALEX_BACKWARD_CHUNK_SIZE);
     const all = [];
 
     for (const chunk of chunks) {
       const url = new URL(`${this.baseURL}/works`);
       url.searchParams.set("filter", `openalex:${chunk.join("|")}`);
-      url.searchParams.set("per_page", String(chunk.length));
+      url.searchParams.set("per_page", String(OPENALEX_BACKWARD_CHUNK_SIZE));
       url.searchParams.set("select", this.fields);
       this.addAuth(url);
 
       try {
-        const response = await this.fetchJSON(url);
+        const response = await this.fetchJSON(url, 1, signal);
         all.push(...(response.results || []));
       } catch (error) {
+        if (error?.name === "AbortError") throw error;
         this.debug(`Batch hydration failed for ${chunk.length} works: ${error}`);
       }
     }
@@ -260,7 +314,7 @@ var OpenAlexProvider = class {
     return s.slice(0, max);
   }
 
-  normalizeReferencedWorks(value, max) {
+  normalizeReferencedWorks(value, max = Number.POSITIVE_INFINITY) {
     if (!Array.isArray(value)) return [];
     const out = [];
     const seen = new Set();
@@ -377,102 +431,269 @@ var OpenAlexProvider = class {
   // Emits { type } status events plus normalized candidates, one at a time,
   // so the UI can populate progressively and the user can cancel mid-flight.
 
+  shortSeedLabel(seed) {
+    return OpenAlexProvider.clampStr(
+      seed?.title || seed?.doi || "",
+      OPENALEX_MAX_SEED_LABEL_LENGTH
+    );
+  }
+
+  static abortError() {
+    if (typeof DOMException !== "undefined") {
+      return new DOMException("aborted", "AbortError");
+    }
+    const error = new Error("aborted");
+    error.name = "AbortError";
+    return error;
+  }
+
   async *streamSnowball(seedRecords, signal = null) {
+    const seeds = Array.isArray(seedRecords) ? seedRecords : [];
     yield {
       type: "status",
       phase: "resolving",
-      message: `Resolving ${seedRecords.length} seed(s)…`
+      message: `Resolving ${seeds.length} seed(s)…`
+    };
+    if (signal?.aborted) return;
+
+    const jobs = new OpenAlexAsyncQueue();
+    const events = new OpenAlexAsyncQueue();
+    const workers = [];
+    let queuedJobs = 0;
+    let activeJobs = 0;
+    let pendingJobs = 0;
+    let completedJobs = 0;
+    let terminal = false;
+
+    const emitProgress = (seed) => {
+      if (terminal) return;
+      events.push({
+        type: "work-progress",
+        queued: queuedJobs,
+        active: activeJobs,
+        pending: pendingJobs,
+        completed: completedJobs,
+        seed: this.shortSeedLabel(seed)
+      });
     };
 
-    const resolvedSeeds = [];
-    for (let i = 0; i < seedRecords.length; i++) {
-      if (signal?.aborted) return;
-      const seed = seedRecords[i];
-      yield {
-        type: "status",
-        phase: "resolving",
-        message: `Resolving seed ${i + 1} of ${seedRecords.length}: ${seed.title || seed.doi || ""}`
-      };
-      try {
-        const work = await this.resolveSeed(seed, signal);
-        if (work) {
-          resolvedSeeds.push({ seed, work });
-          // Emit the resolved seed so the dialog can build the seed context
-          // (referenced_works, author set, title trigrams) used by the
-          // ranking module. We pass a *trimmed* shape so consumers don't
-          // accidentally hold onto the entire OpenAlex Work payload.
-          yield {
-            type: "seed-resolved",
-            seedIndex: i,
-            seed,
-            work: {
-              id: this.shortOpenAlexID(work.id),
-              referenced_works: this.normalizeReferencedWorks(work.referenced_works, 5000)
-            }
-          };
-        }
-      } catch (error) {
-        if (error?.name === "AbortError") return;
-        this.debug(`Seed resolution failed for "${seed.title || seed.doi}": ${error}`);
+    const emitStatus = (phase, message) => {
+      if (terminal) return;
+      events.push({ type: "status", phase, message });
+    };
+
+    const abort = () => {
+      if (terminal) return;
+      terminal = true;
+      jobs.fail(OpenAlexProvider.abortError());
+      events.close();
+    };
+
+    const abortHandler = () => abort();
+    signal?.addEventListener("abort", abortHandler, { once: true });
+
+    const enqueue = (job) => {
+      if (terminal || signal?.aborted) return false;
+      pendingJobs++;
+      queuedJobs++;
+      if (!jobs.push(job)) {
+        pendingJobs--;
+        queuedJobs--;
+        return false;
       }
+      emitProgress(job.seed);
+      return true;
+    };
+
+    const emitCandidates = (results, direction, seed) => {
+      for (const work of results) {
+        if (terminal || signal?.aborted) return;
+        const candidate = this.normalizeCandidate(work, { direction, seed });
+        if (candidate) events.push({ type: "candidate", candidate });
+      }
+    };
+
+    const executeJob = async (job) => {
+      const label = this.shortSeedLabel(job.seed) || "seed";
+
+      if (job.kind === "resolve") {
+        emitStatus(
+          "resolving",
+          `Resolving seed ${job.seedIndex + 1} of ${seeds.length}: ${label}`
+        );
+        const work = await this.resolveSeed(job.seed, signal);
+        if (!work) {
+          emitStatus("resolve-error", `Could not resolve ${label}; continuing.`);
+          return;
+        }
+
+        if (terminal || signal?.aborted) return;
+        // Keep the seed event bounded for ranking consumers. The original
+        // Work remains private to the queued jobs below so traversal is not
+        // limited by this context payload.
+        events.push({
+          type: "seed-resolved",
+          seedIndex: job.seedIndex,
+          seed: job.seed,
+          work: {
+            id: this.shortOpenAlexID(work.id),
+            referenced_works: this.normalizeReferencedWorks(work.referenced_works, 5000)
+          }
+        });
+
+        if (this.includeBackward) {
+          const ids = this.normalizeReferencedWorks(work.referenced_works);
+          for (const chunk of SnowballUtil.chunk(ids, OPENALEX_BACKWARD_CHUNK_SIZE)) {
+            enqueue({
+              kind: "backward",
+              seed: job.seed,
+              seedIndex: job.seedIndex,
+              ids: chunk
+            });
+          }
+        }
+
+        if (this.includeForward) {
+          const openAlexID = this.shortOpenAlexID(work.id);
+          if (openAlexID) {
+            enqueue({
+              kind: "forward",
+              seed: job.seed,
+              seedIndex: job.seedIndex,
+              openAlexID,
+              cursor: "*"
+            });
+          }
+        }
+        return;
+      }
+
+      if (job.kind === "backward") {
+        emitStatus("backward", `Fetching backward references for ${label}…`);
+        const response = await this.fetchBackwardChunk(job.ids, signal);
+        const results = Array.isArray(response?.results) ? response.results : [];
+        emitCandidates(results, "backward", job.seed);
+        return;
+      }
+
+      if (job.kind === "forward") {
+        emitStatus("forward", `Fetching forward citations for ${label}…`);
+        const response = await this.fetchForwardPage(job.openAlexID, job.cursor, signal);
+        const results = Array.isArray(response?.results) ? response.results : [];
+        emitCandidates(results, "forward", job.seed);
+
+        const nextCursor = response?.meta?.next_cursor || null;
+        if (!terminal && !signal?.aborted && nextCursor) {
+          enqueue({
+            kind: "forward",
+            seed: job.seed,
+            seedIndex: job.seedIndex,
+            openAlexID: job.openAlexID,
+            cursor: nextCursor
+          });
+        }
+      }
+    };
+
+    const maybeFinish = () => {
+      if (terminal || pendingJobs !== 0 || activeJobs !== 0) return;
+      terminal = true;
+      jobs.close();
+      events.push({ type: "status", phase: "done", message: "Done" });
+      events.close();
+    };
+
+    const runWorker = async () => {
+      while (!terminal) {
+        let result;
+        try {
+          result = await jobs.next();
+        } catch (error) {
+          if (terminal || signal?.aborted || error?.name === "AbortError") return;
+          terminal = true;
+          jobs.fail(error);
+          events.fail(error);
+          return;
+        }
+        if (result.done || terminal) return;
+
+        const job = result.value;
+        queuedJobs--;
+        activeJobs++;
+        emitProgress(job.seed);
+        try {
+          await executeJob(job);
+        } catch (error) {
+          if (error?.name === "AbortError" || signal?.aborted) {
+            abort();
+          } else if (!terminal) {
+            const kind = job.kind === "resolve" ? "seed resolution" : `${job.kind} crawl`;
+            emitStatus(
+              "error",
+              `${kind} failed for ${this.shortSeedLabel(job.seed) || "seed"}; continuing.`
+            );
+            this.debug(`${kind} failed: ${error}`);
+          }
+        } finally {
+          activeJobs--;
+          pendingJobs--;
+          completedJobs++;
+          if (!terminal) {
+            emitProgress(job.seed);
+            maybeFinish();
+          }
+        }
+      }
+    };
+
+    for (let i = 0; i < seeds.length; i++) {
+      enqueue({ kind: "resolve", seed: seeds[i], seedIndex: i });
     }
 
-    for (let i = 0; i < resolvedSeeds.length; i++) {
-      if (signal?.aborted) return;
-      const { seed, work } = resolvedSeeds[i];
-
-      if (this.includeBackward) {
-        yield {
-          type: "status",
-          phase: "backward",
-          message: `Fetching backward references for seed ${i + 1} of ${resolvedSeeds.length}…`
-        };
-        try {
-          for await (const candidate of this.streamBackward(seed, work, signal)) {
-            yield { type: "candidate", candidate };
-          }
-        } catch (error) {
-          if (error?.name === "AbortError") return;
-          this.debug(`Backward stream failed: ${error}`);
-        }
-      }
-
-      if (signal?.aborted) return;
-
-      if (this.includeForward) {
-        yield {
-          type: "status",
-          phase: "forward",
-          message: `Fetching forward citations for seed ${i + 1} of ${resolvedSeeds.length}…`
-        };
-        try {
-          for await (const candidate of this.streamForward(seed, work, signal)) {
-            yield { type: "candidate", candidate };
-          }
-        } catch (error) {
-          if (error?.name === "AbortError") return;
-          this.debug(`Forward stream failed: ${error}`);
-        }
-      }
+    for (let i = 0; i < this.maxWorkers && !terminal; i++) {
+      workers.push(runWorker());
     }
+    maybeFinish();
 
-    yield { type: "status", phase: "done", message: "Done" };
+    try {
+      for await (const event of events) {
+        yield event;
+      }
+    } finally {
+      signal?.removeEventListener("abort", abortHandler);
+      if (!terminal) abort();
+      await Promise.all(workers);
+    }
+  }
+
+  async fetchBackwardChunk(ids, signal = null) {
+    const cleanIDs = this.normalizeReferencedWorks(ids);
+    if (cleanIDs.length === 0) return { results: [] };
+
+    const url = new URL(`${this.baseURL}/works`);
+    url.searchParams.set("filter", `openalex:${cleanIDs.join("|")}`);
+    url.searchParams.set("per_page", String(OPENALEX_BACKWARD_CHUNK_SIZE));
+    url.searchParams.set("select", this.fields);
+    this.addAuth(url);
+    return this.fetchJSON(url, 1, signal);
+  }
+
+  async fetchForwardPage(openAlexID, cursor, signal = null) {
+    const url = new URL(`${this.baseURL}/works`);
+    url.searchParams.set("filter", `cites:${openAlexID}`);
+    url.searchParams.set("per_page", String(OPENALEX_BACKWARD_CHUNK_SIZE));
+    url.searchParams.set("select", this.fields);
+    url.searchParams.set("cursor", cursor);
+    this.addAuth(url);
+    return this.fetchJSON(url, 1, signal);
   }
 
   async *streamBackward(seed, work, signal) {
-    const ids = (work.referenced_works || []).slice(0, this.maxBackwardPerSeed);
-    const cleanIDs = ids.map((id) => this.shortOpenAlexID(id)).filter(Boolean);
+    const cleanIDs = this.normalizeReferencedWorks(work?.referenced_works);
 
-    // 50 per page so the UI sees results sooner than the 100-page batch.
-    for (const chunk of SnowballUtil.chunk(cleanIDs, 50)) {
+    for (const chunk of SnowballUtil.chunk(cleanIDs, OPENALEX_BACKWARD_CHUNK_SIZE)) {
       if (signal?.aborted) return;
-      const url = new URL(`${this.baseURL}/works`);
-      url.searchParams.set("filter", `openalex:${chunk.join("|")}`);
-      url.searchParams.set("per_page", String(chunk.length));
-      url.searchParams.set("select", this.fields);
-      this.addAuth(url);
-
-      const response = await this.fetchJSON(url, 1, signal);
+      const response = await this.fetchBackwardChunk(chunk, signal);
       const results = Array.isArray(response?.results) ? response.results : [];
       for (const w of results) {
         if (signal?.aborted) return;
@@ -483,37 +704,21 @@ var OpenAlexProvider = class {
   }
 
   async *streamForward(seed, work, signal) {
-    const openAlexID = this.shortOpenAlexID(work.id);
+    const openAlexID = this.shortOpenAlexID(work?.id);
     if (!openAlexID) return;
 
-    // 50 per page + cursor pagination so candidates surface as soon as
-    // each page is fetched, up to maxForwardPerSeed total.
-    const perPage = 50;
     let cursor = "*";
-    let yielded = 0;
 
-    while (cursor && yielded < this.maxForwardPerSeed) {
+    while (cursor) {
       if (signal?.aborted) return;
-      const url = new URL(`${this.baseURL}/works`);
-      url.searchParams.set("filter", `cites:${openAlexID}`);
-      url.searchParams.set("per_page", String(perPage));
-      url.searchParams.set("select", this.fields);
-      url.searchParams.set("cursor", cursor);
-      this.addAuth(url);
-
-      const response = await this.fetchJSON(url, 1, signal);
+      const response = await this.fetchForwardPage(openAlexID, cursor, signal);
       const results = Array.isArray(response?.results) ? response.results : [];
       for (const w of results) {
         if (signal?.aborted) return;
-        if (yielded >= this.maxForwardPerSeed) return;
         const candidate = this.normalizeCandidate(w, { direction: "forward", seed });
-        if (candidate) {
-          yielded++;
-          yield candidate;
-        }
+        if (candidate) yield candidate;
       }
       cursor = response?.meta?.next_cursor || null;
-      if (!cursor) break;
     }
   }
 
