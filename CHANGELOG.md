@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.7] – 2026-07-22
+
 ### Added
 - Added exhaustive citation snowballing as the default search mode, with an
   opt-in early-stop limit that defaults to 1,000 unique candidates.
