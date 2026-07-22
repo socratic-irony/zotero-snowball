@@ -107,6 +107,17 @@ test("manifest includes Zotero-required add-on compatibility metadata", () => {
   assert.match(zotero?.update_url, /^https:\/\//);
 });
 
+test("API key fields conceal values and disable autocomplete", () => {
+  const source = fs.readFileSync(path.join(ROOT, "src/chrome/content/snowballPrefs.xhtml"), "utf8");
+
+  for (const id of ["pref-openAlexAPIKey", "pref-semanticScholarAPIKey"]) {
+    const input = source.match(new RegExp(`<html:input\\b[^>]*\\bid="${id}"[^>]*/>`))?.[0];
+    assert.ok(input, `${id} must be present in the preferences document`);
+    assert.match(input, /\btype="password"(?:\s|\/?>)/);
+    assert.match(input, /\bautocomplete="off"(?:\s|\/?>)/);
+  }
+});
+
 test("toolbar uses a native-size transparent context-painted SVG", () => {
   const iconPath = path.join(ROOT, "src/chrome/content/icons/snowball.svg");
   assert.ok(fs.existsSync(iconPath), "canonical toolbar SVG must exist");
