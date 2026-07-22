@@ -96,18 +96,21 @@ function loadController(prefValues = {}) {
   return { context, plugin, alerts, openedDialogs };
 }
 
-function loadDialog() {
-  return vm.createContext({
+function loadDialog({ formatUserError = null, snowballLog = null } = {}) {
+  const globals = {
     AbortController,
     DOMException,
     Error,
     Promise,
     Zotero: { debug() {} }
-  });
+  };
+  if (formatUserError) globals.formatUserError = formatUserError;
+  if (snowballLog) globals.SnowballLog = snowballLog;
+  return vm.createContext(globals);
 }
 
-async function runDialog(providerConfig, events) {
-  const context = loadDialog();
+async function runDialog(providerConfig, events, streamError = null, options = {}) {
+  const context = loadDialog(options);
   vm.runInContext(readProjectFile("src/chrome/content/snowballDialog.js"), context, {
     filename: "snowballDialog.js"
   });
@@ -115,6 +118,8 @@ async function runDialog(providerConfig, events) {
   const consumed = [];
   const ingested = [];
   const progress = [];
+  const statuses = [];
+  const loadingStates = [];
   context.OpenAlexProvider = class {
     constructor(config) {
       this.config = config;
@@ -125,6 +130,7 @@ async function runDialog(providerConfig, events) {
         consumed.push(event);
         yield event;
       }
+      if (streamError) throw streamError;
     }
   };
 
@@ -138,22 +144,29 @@ async function runDialog(providerConfig, events) {
   dialog.candidates = [];
   dialog.loadingWasCanceled = false;
   dialog.limitWasReached = false;
-  dialog.setLoading = () => {};
-  dialog.setStatus = () => {};
+  dialog.setLoading = (isLoading) => {
+    loadingStates.push(isLoading);
+    dialog.loading = isLoading;
+  };
+  dialog.setStatus = (message) => statuses.push(String(message));
   dialog.setProgress = (message) => progress.push(String(message));
   dialog.flushRefresh = () => {};
   dialog.scheduleRefresh = () => {};
   dialog.refineWithSemanticScholar = async () => {};
   dialog.getVisibleCandidates = () => [];
   dialog.showDetails = () => {};
+  const seen = new Set();
   dialog.ingestCandidate = async (candidate) => {
+    const key = candidate.openAlexID || candidate.doi || candidate.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
     ingested.push(candidate);
     dialog.candidates.push(candidate);
     return true;
   };
 
   await dialog.startStreaming();
-  return { dialog, consumed, ingested, progress };
+  return { dialog, consumed, ingested, progress, statuses, loadingStates };
 }
 
 test("exhaustive search is the default and the opt-in cap defaults to 1,000", () => {
@@ -224,6 +237,7 @@ test("preferences present one opt-in total limit and conceal API keys", () => {
 test("the limit checkbox enables and disables its numeric control", () => {
   const checkbox = { checked: false };
   const limitInput = { disabled: false };
+  /** @type {Map<string, { checked?: boolean, disabled?: boolean }>} */
   const controls = new Map([
     ["pref-limitResults", checkbox],
     ["pref-maxCandidatesTotal", limitInput]
@@ -294,4 +308,122 @@ test("exhaustive mode ignores the numeric cap and remains distinguishable from S
   assert.equal(result.consumed.length, 3);
   assert.equal(result.dialog.abortController.signal.aborted, false);
   assert.match(result.progress.at(-1), /^Done — 3 candidates loaded$/);
+});
+
+test("stream progress reports unique candidates plus active and queued counts", async () => {
+  const result = await runDialog(
+    { apiKey: "user-key", limitResults: false },
+    [
+      { type: "candidate", candidate: { openAlexID: "W1" } },
+      { type: "candidate", candidate: { openAlexID: "W1" } },
+      {
+        type: "work-progress",
+        queued: 4,
+        active: 2,
+        pending: 6,
+        completed: 1,
+        seed: "seed label must not be displayed"
+      }
+    ]
+  );
+
+  assert.equal(result.loadingStates[0], true);
+  assert.ok(result.progress.includes("1 unique candidate found — 2 active, 4 queued"));
+  assert.ok(!result.progress.some((message) => message.includes("seed label")));
+  assert.equal(result.progress.at(-1), "Done — 1 candidate loaded");
+});
+
+function typedOpenAlexError(code, userMessage) {
+  const error = new Error(userMessage);
+  error.name = "SnowballError";
+  error.code = code;
+  error.userMessage = userMessage;
+  return error;
+}
+
+test("OpenAlex credential stream errors preserve partial results and formatted message", async () => {
+  const error = typedOpenAlexError(
+    "OPENALEX_CREDENTIALS",
+    "OpenAlex credentials were rejected. Check your API key in Preferences."
+  );
+  const result = await runDialog(
+    { apiKey: "user-key", limitResults: false },
+    [{ type: "candidate", candidate: { openAlexID: "W1" } }],
+    error,
+    { formatUserError: (received) => `formatted ${received.code}` }
+  );
+
+  assert.equal(result.ingested.length, 1);
+  assert.equal(result.statuses.at(-1), "Search failed");
+  assert.equal(
+    result.progress.at(-1),
+    "Search failed — formatted OPENALEX_CREDENTIALS — 1 candidate loaded"
+  );
+  assert.doesNotMatch(result.progress.at(-1), /Done|Stopped|Limit reached/);
+  assert.equal(result.dialog.loading, false);
+});
+
+test("OpenAlex budget stream errors preserve partial results and formatted message", async () => {
+  const error = typedOpenAlexError(
+    "OPENALEX_BUDGET_EXHAUSTED",
+    "Your OpenAlex daily allowance is exhausted."
+  );
+  const result = await runDialog(
+    { apiKey: "user-key", limitResults: false },
+    [{ type: "candidate", candidate: { openAlexID: "W1" } }],
+    error,
+    { formatUserError: (received) => `formatted ${received.code}` }
+  );
+
+  assert.equal(result.ingested.length, 1);
+  assert.equal(result.statuses.at(-1), "Search failed");
+  assert.equal(
+    result.progress.at(-1),
+    "Search failed — formatted OPENALEX_BUDGET_EXHAUSTED — 1 candidate loaded"
+  );
+  assert.doesNotMatch(result.progress.at(-1), /Done|Stopped|Limit reached/);
+  assert.equal(result.dialog.loading, false);
+});
+
+test("stream error fallback scrubs raw provider messages when no formatter is available", async () => {
+  const secret = "OPENALEX_SECRET_VALUE";
+  const error = typedOpenAlexError("OPENALEX_CREDENTIALS", `Provider leaked ${secret}`);
+  const result = await runDialog(
+    { apiKey: "user-key", limitResults: false },
+    [{ type: "candidate", candidate: { openAlexID: "W1" } }],
+    error,
+    {
+      snowballLog: {
+        scrub(value) {
+          return String(value).replaceAll(secret, "[redacted]");
+        },
+        error() {},
+        formatError() {
+          return "scrubbed log error";
+        }
+      }
+    }
+  );
+
+  assert.equal(
+    result.progress.at(-1),
+    "Search failed — Provider leaked [redacted] — 1 candidate loaded"
+  );
+  assert.doesNotMatch(result.progress.at(-1), new RegExp(secret));
+});
+
+test("stream error fallback uses a generic message without a scrubber", async () => {
+  const secret = "OPENALEX_SECRET_VALUE";
+  const error = typedOpenAlexError("OPENALEX_BUDGET_EXHAUSTED", `Provider leaked ${secret}`);
+  const result = await runDialog(
+    { apiKey: "user-key", limitResults: false },
+    [{ type: "candidate", candidate: { openAlexID: "W1" } }],
+    error
+  );
+
+  assert.equal(
+    result.progress.at(-1),
+    "Search failed — Unable to complete the search. Please try again. — 1 candidate loaded"
+  );
+  assert.doesNotMatch(result.progress.at(-1), new RegExp(secret));
 });

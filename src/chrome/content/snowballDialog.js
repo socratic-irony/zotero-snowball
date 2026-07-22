@@ -162,6 +162,7 @@ var SnowballDialog = {
     const libraryID = this.args.target?.libraryID;
 
     let added = 0;
+    let streamErrorMessage = null;
     try {
       for await (const event of provider.streamSnowball(this.args.seeds, signal)) {
         if (signal.aborted) break;
@@ -171,6 +172,23 @@ var SnowballDialog = {
           // Keep the summary up-to-date while we wait for the first
           // candidate so the user sees movement instead of "Starting…".
           if (this.candidates.length === 0) {
+            this.setStatus("Searching…");
+          }
+          continue;
+        }
+
+        if (event.type === "work-progress") {
+          const active = Number.isFinite(Number(event.active))
+            ? Math.max(0, Math.trunc(Number(event.active)))
+            : 0;
+          const queued = Number.isFinite(Number(event.queued))
+            ? Math.max(0, Math.trunc(Number(event.queued)))
+            : 0;
+          const unique = this.candidates.length;
+          this.setProgress(
+            `${unique} unique candidate${unique === 1 ? "" : "s"} found — ${active} active, ${queued} queued`
+          );
+          if (unique === 0) {
             this.setStatus("Searching…");
           }
           continue;
@@ -208,6 +226,20 @@ var SnowballDialog = {
       }
     } catch (error) {
       if (error?.name !== "AbortError") {
+        let friendly = "";
+        try {
+          if (typeof formatUserError === "function") {
+            friendly = formatUserError(error);
+          } else if (
+            typeof SnowballLog !== "undefined" &&
+            typeof SnowballLog.scrub === "function"
+          ) {
+            friendly = SnowballLog.scrub(String(error?.userMessage || error?.message || error));
+          }
+        } catch (_) {
+          /* use the generic message below */
+        }
+        streamErrorMessage = String(friendly || "Unable to complete the search. Please try again.");
         try {
           if (typeof SnowballLog !== "undefined") {
             SnowballLog.error("stream failed", { error: SnowballLog.formatError(error) });
@@ -223,7 +255,7 @@ var SnowballDialog = {
       // After the OpenAlex stream finishes (or is canceled), optionally
       // refine scores with Semantic Scholar SPECTER2 embeddings — but
       // ONLY if the user provided an S2 API key. No key, no S2 traffic.
-      if (!signal.aborted) {
+      if (!signal.aborted && !streamErrorMessage) {
         try {
           await this.refineWithSemanticScholar();
         } catch (error) {
@@ -242,7 +274,12 @@ var SnowballDialog = {
       this.setLoading(false);
       this.flushRefresh();
       const total = this.candidates.length;
-      if (this.limitWasReached) {
+      if (streamErrorMessage) {
+        this.setStatus("Search failed");
+        this.setProgress(
+          `Search failed — ${streamErrorMessage} — ${total} candidate${total === 1 ? "" : "s"} loaded`
+        );
+      } else if (this.limitWasReached) {
         this.setStatus("Limit reached");
         this.setProgress(`Limit reached — ${total} candidate${total === 1 ? "" : "s"} loaded`);
       } else if (signal.aborted) {
