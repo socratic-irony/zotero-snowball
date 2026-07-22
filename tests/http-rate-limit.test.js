@@ -104,6 +104,14 @@ async function settle() {
   for (let index = 0; index < 12; index++) await Promise.resolve();
 }
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
+}
+
 function openAlexURL(pathname) {
   return `https://api.openalex.org${pathname}`;
 }
@@ -231,7 +239,7 @@ test("HTTP-date Retry-After is converted using the injected clock", async () => 
   assert.equal(clock.waits[0].ms, 4_000);
 
   controller.abort();
-  await assert.rejects(request, (error) => error.name === "AbortError");
+  await assert.rejects(request, (error) => isRecord(error) && error.name === "AbortError");
 });
 
 test("aborting a caller during a host-gate wait removes its waiter", async () => {
@@ -254,7 +262,7 @@ test("aborting a caller during a host-gate wait removes its waiter", async () =>
   await settle();
   controller.abort();
 
-  await assert.rejects(waiting, (error) => error.name === "AbortError");
+  await assert.rejects(waiting, (error) => isRecord(error) && error.name === "AbortError");
   assert.equal(fetchCount, 1);
   assert.equal(ctx.SnowballHTTP._hostStates.get("api.openalex.org").waiters.length, 0);
   clock.advance(1000);
@@ -273,8 +281,11 @@ test("OpenAlex 401 and ordinary 403 are terminal credential errors", async () =>
     await assert.rejects(
       ctx.SnowballHTTP.fetchJSON(openAlexURL(`/works/auth-${status}`), { maxRetries: 4 }),
       (error) =>
+        isRecord(error) &&
         error.code === "OPENALEX_CREDENTIALS" &&
+        typeof error.userMessage === "string" &&
         /Preferences/.test(error.userMessage) &&
+        isRecord(error.context) &&
         error.context.status === status
     );
     assert.equal(fetchCount, 1);
@@ -363,8 +374,11 @@ test("zero OpenAlex daily allowance is terminal and is not retried", async () =>
   await assert.rejects(
     ctx.SnowballHTTP.fetchJSON(openAlexURL("/works/budget"), { maxRetries: 4 }),
     (error) =>
+      isRecord(error) &&
       error.code === "OPENALEX_BUDGET_EXHAUSTED" &&
+      typeof error.userMessage === "string" &&
       /daily allowance/i.test(error.userMessage) &&
+      isRecord(error.context) &&
       error.context.status === 429
   );
   assert.equal(fetchCount, 1);
@@ -381,7 +395,7 @@ test("zero daily allowance in an OpenAlex response body is terminal", async () =
 
   await assert.rejects(
     ctx.SnowballHTTP.fetchJSON(openAlexURL("/works/body-budget"), { maxRetries: 4 }),
-    (error) => error.code === "OPENALEX_BUDGET_EXHAUSTED"
+    (error) => isRecord(error) && error.code === "OPENALEX_BUDGET_EXHAUSTED"
   );
   assert.equal(fetchCount, 1);
   assert.equal(clock.waits.length, 0);
@@ -404,7 +418,11 @@ test("retry exhaustion reports a distinct OpenAlex throttling error", async () =
 
   await assert.rejects(
     request,
-    (error) => error.code === "OPENALEX_THROTTLED" && error.context.status === 429
+    (error) =>
+      isRecord(error) &&
+      error.code === "OPENALEX_THROTTLED" &&
+      isRecord(error.context) &&
+      error.context.status === 429
   );
   assert.equal(fetchCount, 2);
 });
