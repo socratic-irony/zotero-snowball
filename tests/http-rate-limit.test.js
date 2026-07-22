@@ -311,9 +311,36 @@ test("OpenAlex credential errors scrub secret-bearing URLs and bodies", async ()
   assert.ok(!JSON.stringify(error.context).includes("BODY_SECRET"));
 });
 
+test("positive OpenAlex daily allowance headers do not turn 403 into throttling", async () => {
+  const clock = new FakeClock();
+  let fetchCount = 0;
+  const ctx = loadHTTP(async () => {
+    fetchCount++;
+    return response(
+      403,
+      { error: "invalid credentials" },
+      {
+        "X-RateLimit-Limit": "10000",
+        "X-RateLimit-Remaining": "10",
+        "X-RateLimit-Reset": "3600"
+      }
+    );
+  }, clock);
+
+  await assert.rejects(
+    ctx.SnowballHTTP.fetchJSON(openAlexURL("/works/positive-daily-headers"), { maxRetries: 0 }),
+    (error) =>
+      isRecord(error) &&
+      error.code === "OPENALEX_CREDENTIALS" &&
+      isRecord(error.context) &&
+      error.context.status === 403
+  );
+  assert.equal(fetchCount, 1);
+  assert.equal(clock.waits.length, 0);
+});
+
 test("rate-evidenced 403 and transient statuses use bounded shared retry backoff", async () => {
   const cases = [
-    { status: 403, headers: { "X-RateLimit-Remaining": "10" } },
     { status: 403, body: "rate limit exceeded" },
     { status: 408 },
     { status: 425 },
@@ -351,6 +378,36 @@ test("rate-evidenced 403 and transient statuses use bounded shared retry backoff
     await request;
     assert.equal(fetchCount, 2, `status ${currentCase.status} should retry once`);
     assert.deepEqual(starts, [0, 100]);
+  }
+});
+
+test("generic retryable OpenAlex responses use HTTP_ERROR after retry exhaustion", async () => {
+  for (const status of [408, 425, 500, 503, 599]) {
+    const clock = new FakeClock();
+    let fetchCount = 0;
+    const ctx = loadHTTP(async () => {
+      fetchCount++;
+      return response(status, { error: "temporary provider failure" });
+    }, clock);
+
+    const request = ctx.SnowballHTTP.fetchJSON(openAlexURL(`/works/exhausted-${status}`), {
+      maxRetries: 1
+    });
+    await settle();
+    assert.equal(fetchCount, 1);
+    assert.equal(clock.waits[0].ms, 100);
+
+    clock.advance(100);
+    await settle();
+    await assert.rejects(
+      request,
+      (error) =>
+        isRecord(error) &&
+        error.code === "HTTP_ERROR" &&
+        isRecord(error.context) &&
+        error.context.status === status
+    );
+    assert.equal(fetchCount, 2);
   }
 });
 

@@ -274,19 +274,27 @@ var SnowballHTTP = {
   },
 
   _hasRateLimitEvidence(response, bodySnippet) {
+    if (Number(response?.status) === 429) return true;
     if (this._retryAfterMs(response) !== null) return true;
     for (const name of [
-      "x-ratelimit-limit",
       "x-ratelimit-remaining",
-      "x-ratelimit-reset",
-      "x-ratelimit-credits-used",
-      "x-rate-limit-limit",
       "x-rate-limit-remaining",
-      "x-rate-limit-reset"
+      "x-ratelimit-remaining-usd",
+      "x-ratelimit-daily-remaining",
+      "x-ratelimit-daily-remaining-usd",
+      "x-rate-limit-remaining-usd",
+      "x-rate-limit-daily-remaining",
+      "x-rate-limit-daily-remaining-usd",
+      "x-openalex-daily-remaining"
     ]) {
-      if (this._getHeader(response?.headers, name) !== null) return true;
+      const raw = this._getHeader(response?.headers, name);
+      if (raw === null || raw.trim() === "") continue;
+      const value = Number(raw);
+      if (Number.isFinite(value) && value <= 0) return true;
     }
-    return /rate[\s-]?limit|throttl|too many requests|quota|allowance/i.test(bodySnippet || "");
+    return /rate[\s-]?limit|throttl|too many requests|(?:quota|allowance)[^\n]{0,80}(?:exceed|exhaust|deplet|limit)/i.test(
+      bodySnippet || ""
+    );
   },
 
   _isDailyBudgetExhausted(response, bodySnippet) {
@@ -296,6 +304,9 @@ var SnowballHTTP = {
       "x-ratelimit-daily-remaining",
       "x-ratelimit-daily-remaining-usd",
       "x-rate-limit-remaining",
+      "x-rate-limit-remaining-usd",
+      "x-rate-limit-daily-remaining",
+      "x-rate-limit-daily-remaining-usd",
       "x-openalex-daily-remaining"
     ]) {
       const raw = this._getHeader(response?.headers, name);
@@ -468,7 +479,7 @@ var SnowballHTTP = {
             continue;
           }
 
-          if (isOpenAlex) {
+          if (isOpenAlex && this._hasRateLimitEvidence(response, bodySnippet)) {
             throw SnowballError.openAlexThrottled(errorContext);
           }
         }
