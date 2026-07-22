@@ -1,5 +1,10 @@
 /* global Zotero, SnowballUtil, SnowballLog, SnowballHTTP, SnowballError */
 
+const OPENALEX_MAX_ABSTRACT_POSITION = 10_000;
+const OPENALEX_MAX_ABSTRACT_TOKEN_LENGTH = 256;
+const OPENALEX_MAX_ABSTRACT_ENTRIES = 10_000;
+const OPENALEX_MAX_ABSTRACT_LENGTH = 8_000;
+
 var OpenAlexProvider = class {
   static clampInt(value, min, max, fallback) {
     const n = Number(value);
@@ -279,18 +284,39 @@ var OpenAlexProvider = class {
   }
 
   reconstructAbstract(index) {
-    if (!index) {
+    if (!index || typeof index !== "object" || Array.isArray(index)) {
       return "";
     }
 
     const words = [];
-    for (const [word, positions] of Object.entries(index)) {
+    let processedKeys = 0;
+    let processedEntries = 0;
+
+    for (const word in index) {
+      if (!Object.prototype.hasOwnProperty.call(index, word)) continue;
+      if (processedKeys >= OPENALEX_MAX_ABSTRACT_ENTRIES) break;
+      processedKeys++;
+
+      const positions = index[word];
+      if (!Array.isArray(positions)) continue;
+      const token = OpenAlexProvider.clampStr(word, OPENALEX_MAX_ABSTRACT_TOKEN_LENGTH);
+
       for (const position of positions) {
-        words[position] = word;
+        if (processedEntries >= OPENALEX_MAX_ABSTRACT_ENTRIES) break;
+        processedEntries++;
+        if (
+          !Number.isFinite(position) ||
+          !Number.isInteger(position) ||
+          position < 0 ||
+          position >= OPENALEX_MAX_ABSTRACT_POSITION
+        ) {
+          continue;
+        }
+        words[position] = token;
       }
     }
 
-    return words.filter(Boolean).join(" ");
+    return OpenAlexProvider.clampStr(words.filter(Boolean).join(" "), OPENALEX_MAX_ABSTRACT_LENGTH);
   }
 
   extractAuthors(authorships) {

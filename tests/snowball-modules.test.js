@@ -274,6 +274,31 @@ test("OpenAlex provider normalizes, reconstructs, and deduplicates candidates", 
   assert.equal(deduped[0].abstract, "later abstract");
 });
 
+test("OpenAlex abstract reconstruction ignores invalid positions and bounds provider data", () => {
+  const { OpenAlexProvider } = loadModules(["util.js", "openalex.js"]);
+  const provider = new OpenAlexProvider({});
+
+  assert.equal(provider.reconstructAbstract({ dangerous: [1_000_000_000] }), "");
+
+  const oversizedToken = "x".repeat(1000);
+  const output = provider.reconstructAbstract({
+    first: [0],
+    invalid: [-1, 1.5, Infinity, NaN, "1", 100_000],
+    [oversizedToken]: [1],
+    second: [2],
+    malformed: "not an array"
+  });
+
+  assert.equal(output, `first ${"x".repeat(256)} second`);
+  assert.ok(output.length <= 8_000);
+
+  const budgetedIndex = {};
+  for (let i = 0; i <= 10_000; i++) {
+    budgetedIndex[`token${i}`] = [0];
+  }
+  assert.equal(provider.reconstructAbstract(budgetedIndex), "token9999");
+});
+
 test("ranking prefers overlapping new candidates and penalizes existing duplicates", () => {
   // ranking.js depends on SnowballUtil for trigrams/jaccard/normalizeAuthorName
   const { SnowballRanking } = loadModules(["util.js", "ranking.js"]);
