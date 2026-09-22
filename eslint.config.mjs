@@ -68,6 +68,8 @@ export default [
         SnowballRanking: "readonly",
         SnowballZoteroItems: "readonly",
         SnowballDialog: "readonly",
+        SnowballCandidateStore: "readonly",
+        SnowballCandidateView: "readonly",
         SnowballPrefs: "readonly",
         OpenAlexProvider: "readonly",
         SemanticScholarProvider: "readonly"

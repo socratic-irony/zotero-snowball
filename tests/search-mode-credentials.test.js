@@ -111,6 +111,15 @@ function loadDialog({ formatUserError = null, snowballLog = null } = {}) {
 
 async function runDialog(providerConfig, events, streamError = null, options = {}) {
   const context = loadDialog(options);
+  // Same load order as snowballDialog.xhtml: the dialog uses the store and
+  // view modules, which depend on util.js.
+  for (const dependency of [
+    "src/chrome/content/modules/util.js",
+    "src/chrome/content/modules/candidateStore.js",
+    "src/chrome/content/modules/candidateView.js"
+  ]) {
+    vm.runInContext(readProjectFile(dependency), context, { filename: dependency });
+  }
   vm.runInContext(readProjectFile("src/chrome/content/snowballDialog.js"), context, {
     filename: "snowballDialog.js"
   });
@@ -141,7 +150,8 @@ async function runDialog(providerConfig, events, streamError = null, options = {
     target: { libraryID: 1 },
     flags: { skipAlreadyInLibrary: false }
   };
-  dialog.candidates = [];
+  // Candidates live in the store; the getter returns its array.
+  dialog.store = new context.SnowballCandidateStore();
   dialog.loadingWasCanceled = false;
   dialog.limitWasReached = false;
   dialog.setLoading = (isLoading) => {

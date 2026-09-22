@@ -37,3 +37,9 @@ declare var SemanticScholarProvider: any;
 
 // Subscript loader handle used by bootstrap.js
 declare var SnowballChromeHandle: any;
+
+// Mozilla chrome windows opened with window.openDialog(url, name, features,
+// ...args) expose those extra args as `window.arguments`.
+interface Window {
+  arguments?: any[];
+}

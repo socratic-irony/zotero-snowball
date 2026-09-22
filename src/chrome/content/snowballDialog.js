@@ -1,17 +1,11 @@
-// @ts-nocheck — DOM-heavy XUL chrome script. The tsc --checkJs lib.dom
-// types over-narrow `document.getElementById(...)` to `HTMLElement`, which
-// loses the `.value` / `.checked` / `.disabled` properties on input
-// elements. Tightening this file with proper JSDoc casts is tracked in
-// docs/CQ_SECURITY_ROADMAP.md.
+// Review dialog controller. Candidate storage and dedupe live in
+// modules/candidateStore.js, and all filtering, sorting, and display text
+// in modules/candidateView.js; this file only wires those to the DOM and
+// to the OpenAlex stream.
 var SnowballDialog = {
   args: null,
-  candidates: [],
-  // dedupe key -> candidate (kept in sync with this.candidates)
-  dedupeIndex: new Map(),
-  // year-bucket index for fuzzy trigram dedupe (catches paraphrased titles)
-  yearBuckets: new Map(),
-  // Trigram-Jaccard threshold above which two same-year candidates count as duplicates
-  TRIGRAM_DEDUPE_THRESHOLD: 0.85,
+  // SnowballCandidateStore — created fresh in init().
+  store: null,
   abortController: null,
   loadingWasCanceled: false,
   limitWasReached: false,
@@ -31,6 +25,11 @@ var SnowballDialog = {
   },
   // Reference to the resolved provider weights, passed through to ranking.
   weights: null,
+
+  /** All candidates in arrival order (owned by the store). */
+  get candidates() {
+    return this.store ? this.store.candidates : [];
+  },
 
   // ---------- Lifecycle -----------------------------------------------------
 
@@ -65,9 +64,7 @@ var SnowballDialog = {
 
   init(args) {
     this.args = args || {};
-    this.candidates = [];
-    this.dedupeIndex = new Map();
-    this.yearBuckets = new Map();
+    this.store = new SnowballCandidateStore();
     this.seedWorks = [];
     this.seedContext = null;
     this.weights =
@@ -178,15 +175,9 @@ var SnowballDialog = {
         }
 
         if (event.type === "work-progress") {
-          const active = Number.isFinite(Number(event.active))
-            ? Math.max(0, Math.trunc(Number(event.active)))
-            : 0;
-          const queued = Number.isFinite(Number(event.queued))
-            ? Math.max(0, Math.trunc(Number(event.queued)))
-            : 0;
           const unique = this.candidates.length;
           this.setProgress(
-            `${unique} unique candidate${unique === 1 ? "" : "s"} found — ${active} active, ${queued} queued`
+            SnowballCandidateView.workProgressText(unique, event.active, event.queued)
           );
           if (unique === 0) {
             this.setStatus("Searching…");
@@ -273,22 +264,14 @@ var SnowballDialog = {
 
       this.setLoading(false);
       this.flushRefresh();
-      const total = this.candidates.length;
-      if (streamErrorMessage) {
-        this.setStatus("Search failed");
-        this.setProgress(
-          `Search failed — ${streamErrorMessage} — ${total} candidate${total === 1 ? "" : "s"} loaded`
-        );
-      } else if (this.limitWasReached) {
-        this.setStatus("Limit reached");
-        this.setProgress(`Limit reached — ${total} candidate${total === 1 ? "" : "s"} loaded`);
-      } else if (signal.aborted) {
-        this.setStatus("Stopped");
-        this.setProgress(`Stopped — ${total} candidate${total === 1 ? "" : "s"} loaded`);
-      } else {
-        this.setStatus("Done");
-        this.setProgress(`Done — ${total} candidate${total === 1 ? "" : "s"} loaded`);
-      }
+      const end = SnowballCandidateView.streamEndText({
+        errorMessage: streamErrorMessage,
+        limitReached: this.limitWasReached,
+        aborted: signal.aborted,
+        total: this.candidates.length
+      });
+      this.setStatus(end.status);
+      this.setProgress(end.progress);
       // First candidate selected once everything settles, if nothing picked.
       if (this.state.selectedIndex < 0) {
         const visible = this.getVisibleCandidates();
@@ -399,30 +382,13 @@ var SnowballDialog = {
    * Returns true if the candidate was new (vs. a merge into an existing one).
    */
   async ingestCandidate(raw, { libraryID = null, skipExisting = true, skipScore = false } = {}) {
-    // Fast-path: exact dedupe by DOI / OpenAlex ID / normalized title+year.
-    const key = this.dedupeKey(raw);
-    if (key && this.dedupeIndex.has(key)) {
-      this.mergeDuplicate(this.dedupeIndex.get(key), raw);
+    const match = this.store.findMatch(raw);
+    if (match.duplicate) {
+      SnowballCandidateStore.mergeDuplicate(match.duplicate, raw);
       return false;
     }
 
-    // Fuzzy fallback: catch paraphrased duplicates ("Attention Is All You
-    // Need" vs "Attention is All You Need: …") that exact-key dedupe
-    // misses. Only compare within the same year-bucket to keep this O(N)
-    // overall instead of O(N²) across the full candidate set.
-    const candTrigrams =
-      typeof SnowballUtil !== "undefined" ? SnowballUtil.trigrams(raw.title || "") : new Set();
-    if (candTrigrams.size) {
-      const fuzzy = this.findFuzzyDuplicate(raw, candTrigrams);
-      if (fuzzy) {
-        this.mergeDuplicate(fuzzy, raw);
-        return false;
-      }
-    }
-
-    const candidate = Object.assign({}, raw);
-    candidate._index = this.candidates.length;
-    candidate._titleTrigrams = candTrigrams;
+    const candidate = SnowballCandidateStore.createCandidate(raw, match.trigrams);
 
     if (libraryID && typeof SnowballZoteroItems !== "undefined") {
       try {
@@ -452,63 +418,8 @@ var SnowballDialog = {
       candidate._selected = candidate.selectedByDefault !== false;
     }
 
-    if (key) this.dedupeIndex.set(key, candidate);
-    // Add to year bucket for the trigram fallback. Year-less candidates
-    // share a single "_no_year_" bucket; comparison cost there is bounded
-    // by maxCandidatesTotal and titles are short enough that Jaccard is
-    // negligible per pair.
-    const bucketKey = candidate.year != null ? String(candidate.year) : "_no_year_";
-    if (!this.yearBuckets.has(bucketKey)) this.yearBuckets.set(bucketKey, []);
-    this.yearBuckets.get(bucketKey).push(candidate);
-
-    this.candidates.push(candidate);
+    this.store.insert(candidate, match.key);
     return true;
-  },
-
-  /**
-   * Merge `raw` into `existing` (an already-stored candidate). Any field
-   * upgrade we want to do on dedupe lives here so both the exact and
-   * fuzzy paths share semantics.
-   */
-  mergeDuplicate(existing, raw) {
-    if (existing.direction !== raw.direction && raw.direction) {
-      existing.direction = "both";
-    }
-    existing.citedByCount = Math.max(existing.citedByCount || 0, raw.citedByCount || 0);
-    if (!existing.abstract && raw.abstract) existing.abstract = raw.abstract;
-    if (!existing.venue && raw.venue) existing.venue = raw.venue;
-    if (!existing.doi && raw.doi) existing.doi = raw.doi;
-    if (!Array.isArray(existing.referencedWorks) || !existing.referencedWorks.length) {
-      if (Array.isArray(raw.referencedWorks) && raw.referencedWorks.length) {
-        existing.referencedWorks = raw.referencedWorks;
-      }
-    }
-  },
-
-  findFuzzyDuplicate(raw, candTrigrams) {
-    if (typeof SnowballUtil === "undefined") return null;
-    const bucketKey = raw.year != null ? String(raw.year) : "_no_year_";
-    const bucket = this.yearBuckets.get(bucketKey);
-    if (!bucket || !bucket.length) return null;
-    for (const existing of bucket) {
-      const existingTri = existing._titleTrigrams;
-      if (!existingTri || !existingTri.size) continue;
-      const j = SnowballUtil.jaccardSets(existingTri, candTrigrams);
-      if (j >= this.TRIGRAM_DEDUPE_THRESHOLD) return existing;
-    }
-    return null;
-  },
-
-  dedupeKey(candidate) {
-    const doi = String(candidate.doi || "")
-      .trim()
-      .toLowerCase();
-    if (doi) return `doi:${doi}`;
-    if (candidate.openAlexID) return `oa:${candidate.openAlexID}`;
-    const title = String(candidate.title || "")
-      .trim()
-      .toLowerCase();
-    return title ? `title:${title}:${candidate.year || ""}` : "";
   },
 
   // ---------- Loading / progress UI ---------------------------------------
@@ -562,19 +473,21 @@ var SnowballDialog = {
   // ---------- Control wiring ------------------------------------------------
 
   bindControls() {
-    const filterInput = document.getElementById("snowball-filter");
-    filterInput.addEventListener("input", (event) => {
-      this.state.filter = event.target.value;
+    const filterInput = this.control("snowball-filter");
+    filterInput.addEventListener("input", () => {
+      this.state.filter = filterInput.value;
       this.refresh();
     });
 
-    document.getElementById("snowball-direction-filter").addEventListener("change", (event) => {
-      this.state.direction = event.target.value;
+    const directionFilter = this.control("snowball-direction-filter");
+    directionFilter.addEventListener("change", () => {
+      this.state.direction = directionFilter.value;
       this.refresh();
     });
 
-    document.getElementById("snowball-hide-existing").addEventListener("change", (event) => {
-      this.state.hideExisting = event.target.checked;
+    const hideExisting = this.control("snowball-hide-existing");
+    hideExisting.addEventListener("change", () => {
+      this.state.hideExisting = hideExisting.checked;
       this.refresh();
     });
 
@@ -585,20 +498,20 @@ var SnowballDialog = {
       ?.addEventListener("command", () => this.addSelected());
 
     // Min-cites runtime input (default seeded from prefs).
-    const minCitesInput = document.getElementById("snowball-mincites-input");
+    const minCitesInput = this.control("snowball-mincites-input");
     if (minCitesInput) {
       minCitesInput.value = String(this.state.minCitedBy || 0);
-      minCitesInput.addEventListener("input", (event) => {
-        const n = Number(event.target.value);
+      minCitesInput.addEventListener("input", () => {
+        const n = Number(minCitesInput.value);
         this.state.minCitedBy = Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
         this.refresh();
       });
     }
 
-    document.getElementById("snowball-select-all").addEventListener("change", (event) => {
-      const visible = this.getVisibleCandidates();
-      for (const candidate of visible) {
-        candidate._selected = event.target.checked;
+    const selectAll = this.control("snowball-select-all");
+    selectAll.addEventListener("change", () => {
+      for (const candidate of this.getVisibleCandidates()) {
+        candidate._selected = selectAll.checked;
       }
       this.refresh();
     });
@@ -606,14 +519,7 @@ var SnowballDialog = {
     for (const th of document.querySelectorAll("th.sortable")) {
       th.addEventListener("click", () => {
         const key = th.getAttribute("data-sort-key");
-        if (this.state.sort.key === key) {
-          this.state.sort.dir = this.state.sort.dir === "asc" ? "desc" : "asc";
-        } else {
-          this.state.sort.key = key;
-          // String columns default to ascending; numeric to descending so
-          // the most-cited / highest-scored / newest items surface first.
-          this.state.sort.dir = this.isStringSortKey(key) ? "asc" : "desc";
-        }
+        this.state.sort = SnowballCandidateView.nextSort(this.state.sort, key);
         this.refresh();
       });
     }
@@ -630,8 +536,9 @@ var SnowballDialog = {
       .getElementById("snowball-overlay-ok")
       ?.addEventListener("click", () => this.hideOverlay());
     // Click outside the overlay card to dismiss.
-    document.getElementById("snowball-details-overlay")?.addEventListener("click", (event) => {
-      if (event.target.id === "snowball-details-overlay") this.hideOverlay();
+    const overlayEl = document.getElementById("snowball-details-overlay");
+    overlayEl?.addEventListener("click", (event) => {
+      if (event.target === overlayEl) this.hideOverlay();
     });
     // Esc dismisses overlay/toast.
     window.addEventListener("keydown", (event) => {
@@ -807,83 +714,8 @@ var SnowballDialog = {
 
   // ---------- Data view (filter + sort) ------------------------------------
 
-  isStringSortKey(key) {
-    return key === "title" || key === "authors" || key === "venue" || key === "direction";
-  },
-
-  sortValue(candidate, key) {
-    switch (key) {
-      case "authors":
-        return this.formatAuthors(candidate, 5).toLowerCase();
-      case "title":
-        return (candidate.title || "").toLowerCase();
-      case "venue":
-        return (candidate.venue || "").toLowerCase();
-      case "direction":
-        return candidate.direction || "";
-      case "alreadyInLibrary":
-        return candidate.alreadyInLibrary ? 1 : 0;
-      case "relevanceScore":
-        return Number(candidate.relevanceScore) || 0;
-      case "year":
-        return Number(candidate.year) || 0;
-      case "citedByCount":
-        return Number(candidate.citedByCount) || 0;
-      default:
-        return "";
-    }
-  },
-
   getVisibleCandidates() {
-    let list = this.candidates;
-
-    if (this.state.hideExisting) {
-      list = list.filter((c) => !c.alreadyInLibrary);
-    }
-
-    if (this.state.direction !== "all") {
-      list = list.filter((c) => c.direction === this.state.direction || c.direction === "both");
-    }
-
-    const query = this.state.filter.trim().toLowerCase();
-    if (query) {
-      list = list.filter(
-        (c) =>
-          (c.title || "").toLowerCase().includes(query) ||
-          this.formatAuthors(c, 99).toLowerCase().includes(query) ||
-          (c.venue || "").toLowerCase().includes(query)
-      );
-    }
-
-    // Min cited-by — drop candidates below the threshold. citedByCount of
-    // 0 is allowed to pass when minCitedBy is 0.
-    if (this.state.minCitedBy > 0) {
-      const min = this.state.minCitedBy;
-      list = list.filter((c) => (Number(c.citedByCount) || 0) >= min);
-    }
-
-    const { key, dir } = this.state.sort;
-    const mult = dir === "asc" ? 1 : -1;
-
-    return list.slice().sort((a, b) => {
-      const av = this.sortValue(a, key);
-      const bv = this.sortValue(b, key);
-
-      const aMissing = av === null || av === undefined || av === "" || av === 0;
-      const bMissing = bv === null || bv === undefined || bv === "" || bv === 0;
-
-      // Always push missing values to the bottom regardless of sort direction.
-      if (aMissing && bMissing) return 0;
-      if (aMissing) return 1;
-      if (bMissing) return -1;
-
-      if (typeof av === "string") {
-        return av.localeCompare(bv) * mult;
-      }
-      if (av < bv) return -1 * mult;
-      if (av > bv) return 1 * mult;
-      return 0;
-    });
+    return SnowballCandidateView.filterAndSort(this.candidates, this.state);
   },
 
   // ---------- Render --------------------------------------------------------
@@ -921,7 +753,7 @@ var SnowballDialog = {
     }
 
     tr.addEventListener("click", (event) => {
-      if (event.target?.localName !== "input") {
+      if (/** @type {Element} */ (event.target)?.localName !== "input") {
         this.showDetails(candidate._index);
       }
     });
@@ -932,9 +764,13 @@ var SnowballDialog = {
     this.appendStatusCell(tr, candidate.alreadyInLibrary);
     this.appendTextCell(tr, candidate.year || "", "col-year");
     this.appendTextCell(tr, candidate.title || "", "col-title");
-    this.appendTextCell(tr, this.formatAuthors(candidate, 5), "col-authors");
+    this.appendTextCell(tr, SnowballCandidateView.formatAuthors(candidate, 5), "col-authors");
     this.appendTextCell(tr, candidate.venue || "", "col-venue");
-    this.appendTextCell(tr, this.formatNumber(candidate.citedByCount), "col-cited");
+    this.appendTextCell(
+      tr,
+      SnowballCandidateView.formatNumber(candidate.citedByCount),
+      "col-cited"
+    );
 
     return tr;
   },
@@ -949,7 +785,7 @@ var SnowballDialog = {
   },
 
   updateSelectAllState(visible) {
-    const checkbox = document.getElementById("snowball-select-all");
+    const checkbox = this.control("snowball-select-all");
     if (!checkbox) return;
     if (!visible.length) {
       checkbox.checked = false;
@@ -965,27 +801,23 @@ var SnowballDialog = {
   },
 
   updateCounts(visible) {
-    const total = this.candidates.length;
-    const visibleCount = visible.length;
-    const selected = this.candidates.filter((c) => c._selected).length;
-    const word = total === 1 ? "candidate" : "candidates";
+    const selected = this.store.selected().length;
 
     const summary = document.getElementById("snowball-summary");
     if (summary) {
-      if (this.loading && total === 0) {
-        summary.textContent = "Searching…";
-      } else {
-        summary.textContent =
-          total === visibleCount ? `${total} ${word}` : `${visibleCount} of ${total} ${word}`;
-      }
+      summary.textContent = SnowballCandidateView.summaryText({
+        total: this.candidates.length,
+        visible: visible.length,
+        loading: this.loading
+      });
     }
 
     const counter = document.getElementById("snowball-selection-count");
     if (counter) {
-      counter.textContent = selected === 1 ? "1 selected" : `${selected} selected`;
+      counter.textContent = SnowballCandidateView.selectionText(selected);
     }
 
-    const addButton = document.getElementById("snowball-add-selected");
+    const addButton = this.control("snowball-add-selected");
     if (addButton) {
       addButton.disabled = selected === 0;
     }
@@ -1015,13 +847,10 @@ var SnowballDialog = {
   appendScoreCell(tr, score, _candidate) {
     const cell = this.createHTMLElement("td");
     cell.className = "col-score";
-    const value = Math.round((Number(score) || 0) * 100);
+    const value = SnowballCandidateView.scorePercent(score);
     const pill = this.createHTMLElement("span");
-    pill.className = "snowball-score-pill";
+    pill.className = `snowball-score-pill snowball-score-${SnowballCandidateView.scoreTier(value)}`;
     pill.textContent = String(value);
-    if (value >= 50) pill.classList.add("snowball-score-high");
-    else if (value >= 25) pill.classList.add("snowball-score-mid");
-    else pill.classList.add("snowball-score-low");
     cell.appendChild(pill);
     tr.appendChild(cell);
     return cell;
@@ -1033,7 +862,7 @@ var SnowballDialog = {
     const pill = this.createHTMLElement("span");
     const key = direction || "unknown";
     pill.className = `snowball-pill snowball-direction-${key}`;
-    pill.textContent = this.directionLabel(direction);
+    pill.textContent = SnowballCandidateView.directionLabel(direction);
     cell.appendChild(pill);
     tr.appendChild(cell);
     return cell;
@@ -1043,13 +872,9 @@ var SnowballDialog = {
     const cell = this.createHTMLElement("td");
     cell.className = "col-status";
     const pill = this.createHTMLElement("span");
-    if (alreadyInLibrary) {
-      pill.className = "snowball-pill snowball-status-existing";
-      pill.textContent = "In library";
-    } else {
-      pill.className = "snowball-pill snowball-status-new";
-      pill.textContent = "New";
-    }
+    const status = SnowballCandidateView.statusLabel(alreadyInLibrary);
+    pill.className = `snowball-pill snowball-status-${status.kind}`;
+    pill.textContent = status.text;
     cell.appendChild(pill);
     tr.appendChild(cell);
     return cell;
@@ -1107,12 +932,12 @@ var SnowballDialog = {
       if (candidate.year) push(text(candidate.year));
       if (candidate.venue) push(text(candidate.venue));
       // Prefer DOI link, fall back to candidate.url, fall back to OpenAlex page.
-      const linkSpec = this._resolveDetailLink(candidate);
+      const linkSpec = SnowballCandidateView.resolveDetailLink(candidate);
       if (linkSpec) push(this._createDetailLink(linkSpec.label, linkSpec.url));
     }
 
     document.getElementById("snowball-detail-authors").textContent =
-      this.formatAuthors(candidate, 12) || "No authors listed.";
+      SnowballCandidateView.formatAuthors(candidate, 12) || "No authors listed.";
 
     document.getElementById("snowball-detail-abstract").textContent =
       candidate.abstract || "No abstract available.";
@@ -1131,27 +956,24 @@ var SnowballDialog = {
     const list = document.getElementById("snowball-detail-breakdown-list");
     if (!section || !list) return;
 
-    const b = candidate?._scoreBreakdown;
-    if (!b) {
+    const rows = SnowballCandidateView.breakdownRows(candidate?._scoreBreakdown);
+    if (!rows.length) {
       section.setAttribute("hidden", "hidden");
       return;
     }
 
     list.replaceChildren();
-
-    const addRow = (label, value, hint) => {
+    for (const { label, value, hint } of rows) {
       const dt = this.createHTMLElement("dt");
       dt.textContent = label;
       const dd = this.createHTMLElement("dd");
 
       const num = this.createHTMLElement("span");
       num.className = "snowball-detail-breakdown-num";
-      const v = Number(value) || 0;
-      // Always show a sign for clarity, including +0.00.
-      num.textContent = (v >= 0 ? "+" : "") + v.toFixed(2);
+      num.textContent = SnowballCandidateView.formatSigned(value);
       // Tint penalties red, contributions in the secondary text color.
-      if (v < 0) num.classList.add("is-negative");
-      else if (v > 0) num.classList.add("is-positive");
+      if (value < 0) num.classList.add("is-negative");
+      else if (value > 0) num.classList.add("is-positive");
       dd.appendChild(num);
 
       if (hint) {
@@ -1163,50 +985,9 @@ var SnowballDialog = {
 
       list.appendChild(dt);
       list.appendChild(dd);
-    };
-
-    // Always-present signals first.
-    addRow("Text similarity", b.text);
-    addRow(
-      "Bibliographic coupling",
-      b.bibCoupling,
-      b.bibCouplingRaw ? `${b.bibCouplingRaw} shared ref${b.bibCouplingRaw === 1 ? "" : "s"}` : null
-    );
-    addRow(
-      "Co-citation",
-      b.coCitation,
-      b.coCitationRaw
-        ? `${b.coCitationRaw} seed${b.coCitationRaw === 1 ? "" : "s"} cite this`
-        : null
-    );
-    addRow("Author overlap", b.authorOverlap);
-    addRow("Title fuzzy match", b.titleTrigram);
-    addRow("Citation count", b.citation);
-    // Optional / conditional signals.
-    if (b.embedding > 0) addRow("Semantic Scholar embedding", b.embedding);
-    if (b.abstractPenalty) addRow("No abstract", b.abstractPenalty);
-    if (b.duplicatePenalty) addRow("Already in library", b.duplicatePenalty);
-    if (b.directionBoost) addRow("Both directions bonus", b.directionBoost);
+    }
 
     section.removeAttribute("hidden");
-  },
-
-  _resolveDetailLink(candidate) {
-    const doi = String(candidate.doi || "").trim();
-    if (doi) {
-      const safe = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").replace(/^doi:/i, "");
-      return { label: `DOI: ${safe}`, url: `https://doi.org/${encodeURI(safe)}` };
-    }
-    if (typeof candidate.url === "string" && /^https?:\/\//i.test(candidate.url)) {
-      return { label: "Open in browser", url: candidate.url };
-    }
-    if (candidate.openAlexID) {
-      return {
-        label: candidate.openAlexID,
-        url: `https://openalex.org/${encodeURIComponent(candidate.openAlexID)}`
-      };
-    }
-    return null;
   },
 
   /**
@@ -1244,7 +1025,7 @@ var SnowballDialog = {
   /**
    * Show an in-dialog toast.
    * @param {object} opts
-   * @param {string} opts.message
+   * @param {string} [opts.message]
    * @param {"success"|"warning"|"error"} [opts.kind="success"]
    * @param {{label:string,onClick:()=>void}} [opts.action]
    *        Optional inline action button (e.g. "View details").
@@ -1342,11 +1123,11 @@ var SnowballDialog = {
   // ---------- Add to Zotero ------------------------------------------------
 
   async addSelected() {
-    const button = document.getElementById("snowball-add-selected");
+    const button = this.control("snowball-add-selected");
     button.disabled = true;
 
     try {
-      const selected = this.candidates.filter((c) => c._selected);
+      const selected = this.store.selected();
       if (!selected.length) {
         this.showToast({
           message: "Select at least one candidate to add.",
@@ -1364,7 +1145,7 @@ var SnowballDialog = {
       const failedN = failed.length;
       const pdfsN = Number(result?.downloadsStarted) || 0;
 
-      const summary = this._formatAddSummary(addedN, skippedN, failedN, pdfsN);
+      const summary = SnowballCandidateView.formatAddSummary(addedN, skippedN, failedN, pdfsN);
 
       if (failedN === 0) {
         // Happy path: brief confirmation, then close the dialog.
@@ -1410,52 +1191,28 @@ var SnowballDialog = {
     }
   },
 
-  _formatAddSummary(addedN, skippedN, failedN, pdfsN = 0) {
-    const parts = [];
-    if (addedN > 0) parts.push(`Added ${addedN} ${addedN === 1 ? "item" : "items"} to Zotero`);
-    if (skippedN > 0) parts.push(`updated ${skippedN} existing`);
-    if (failedN > 0) parts.push(`${failedN} couldn't be added`);
-    if (pdfsN > 0)
-      parts.push(`downloading ${pdfsN} PDF${pdfsN === 1 ? "" : "s"} in the background`);
-    if (!parts.length) return "Nothing added.";
-    const joined = parts.join("; ");
-    return joined.charAt(0).toUpperCase() + joined.slice(1);
-  },
-
   // ---------- Helpers -------------------------------------------------------
 
-  directionLabel(direction) {
-    switch (direction) {
-      case "backward":
-        return "← Backward";
-      case "forward":
-        return "Forward →";
-      case "both":
-        return "↔ Both";
-      default:
-        return direction || "";
-    }
-  },
-
-  formatAuthors(candidate, limit = 5) {
-    return (candidate.authors || [])
-      .map((author) => author.name || [author.firstName, author.lastName].filter(Boolean).join(" "))
-      .filter(Boolean)
-      .slice(0, limit)
-      .join(", ");
-  },
-
-  formatNumber(value) {
-    const n = Number(value) || 0;
-    return n.toLocaleString();
-  },
-
-  formatScore(score) {
-    return Math.round((Number(score) || 0) * 100);
-  },
-
+  /**
+   * Create an HTML element inside this XUL document, typed by tag name so
+   * e.g. "input" gives an HTMLInputElement.
+   * @template {keyof HTMLElementTagNameMap} K
+   * @param {K} tagName
+   * @returns {HTMLElementTagNameMap[K]}
+   */
   createHTMLElement(tagName) {
-    return document.createElementNS("http://www.w3.org/1999/xhtml", tagName);
+    return /** @type {any} */ (document.createElementNS("http://www.w3.org/1999/xhtml", tagName));
+  },
+
+  /**
+   * getElementById for form controls. The HTML inputs and XUL buttons in
+   * this dialog all have value/checked/disabled at runtime; lib.dom only
+   * knows getElementById returns a generic HTMLElement.
+   * @param {string} id
+   * @returns {HTMLInputElement | null}
+   */
+  control(id) {
+    return /** @type {HTMLInputElement | null} */ (document.getElementById(id));
   }
 };
 

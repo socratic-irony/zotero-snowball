@@ -135,14 +135,19 @@ These items make that constellation mechanically enforced.
 
 ### File-level
 
-- [ ] **Split [snowballDialog.js](../src/chrome/content/snowballDialog.js)**
-      (1322 LOC) into state / render / event-handlers / provider-glue.
-      Reduces both cognitive load and AI-review window pressure.
+- [x] **Split [snowballDialog.js](../src/chrome/content/snowballDialog.js)**
+      — candidate storage/dedupe moved to
+      [candidateStore.js](../src/chrome/content/modules/candidateStore.js)
+      and filtering/sorting/display text to
+      [candidateView.js](../src/chrome/content/modules/candidateView.js),
+      both unit-tested in `tests/candidate-store.test.js`. The dialog now
+      only does DOM wiring and stream handling. A further split of the
+      remaining render / event code is optional.
 - [ ] **Remove the `// @ts-nocheck`** from
-      [snowballDialog.js](../src/chrome/content/snowballDialog.js) and
       [snowballPrefs.js](../src/chrome/content/snowballPrefs.js) by adding
-      JSDoc casts (`/** @type {HTMLInputElement} */`) at each
-      `document.getElementById(...)` site. Probably 30–50 sites total.
+      JSDoc casts at each `document.getElementById(...)` site.
+      (Done for `snowballDialog.js`, which uses a typed `control(id)`
+      helper and a tag-typed `createHTMLElement`.)
 - [ ] **Centralize the error taxonomy** in
       [errors.js](../src/chrome/content/modules/errors.js): every throw from
       network code is one of NetworkError, TimeoutError, RateLimitedError,

@@ -174,19 +174,22 @@ User → Right-click → Snowball Sources
 
 ### Module map
 
-| File                                                                  | Responsibility                                                           |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [`bootstrap.js`](src/bootstrap.js)                                    | Zotero plugin lifecycle. Loads modules in dependency order.              |
-| [`chrome/content/snowball.js`](src/chrome/content/snowball.js)        | Top-level controller: menus, prefs, opens review/prefs dialogs.          |
-| [`chrome/content/snowballDialog.{xhtml,js,css}`](src/chrome/content/) | Streaming review dialog.                                                 |
-| [`chrome/content/snowballPrefs.{xhtml,js,css}`](src/chrome/content/)  | Preferences dialog with bounds-validated inputs.                         |
-| [`modules/log.js`](src/chrome/content/modules/log.js)                 | Centralized logger with secret-scrubbing.                                |
-| [`modules/errors.js`](src/chrome/content/modules/errors.js)           | `SnowballError` class + `formatUserError`.                               |
-| [`modules/http.js`](src/chrome/content/modules/http.js)               | Hardened fetch wrapper: timeouts, retries, host allowlist, scheme guard. |
-| [`modules/openalex.js`](src/chrome/content/modules/openalex.js)       | OpenAlex provider with streaming `streamSnowball` async generator.       |
-| [`modules/ranking.js`](src/chrome/content/modules/ranking.js)         | Per-candidate relevance scoring (cosine over title+abstract terms).      |
-| [`modules/zoteroItems.js`](src/chrome/content/modules/zoteroItems.js) | Seed extraction, library-existence check, item creation per Zotero type. |
-| [`modules/util.js`](src/chrome/content/modules/util.js)               | Small helpers (`chunk`, `normalizeText`, `formatScore`).                 |
+| File                                                                          | Responsibility                                                                                  |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [`bootstrap.js`](src/bootstrap.js)                                            | Zotero plugin lifecycle. Loads modules in dependency order.                                     |
+| [`chrome/content/snowball.js`](src/chrome/content/snowball.js)                | Top-level controller: menus, prefs, opens review/prefs dialogs.                                 |
+| [`chrome/content/snowballDialog.{xhtml,js,css}`](src/chrome/content/)         | Streaming review dialog.                                                                        |
+| [`chrome/content/snowballPrefs.{xhtml,js,css}`](src/chrome/content/)          | Preferences dialog with bounds-validated inputs.                                                |
+| [`modules/log.js`](src/chrome/content/modules/log.js)                         | Centralized logger with secret-scrubbing.                                                       |
+| [`modules/errors.js`](src/chrome/content/modules/errors.js)                   | `SnowballError` class + `formatUserError`.                                                      |
+| [`modules/http.js`](src/chrome/content/modules/http.js)                       | Hardened fetch wrapper: timeouts, retries, host allowlist, scheme guard.                        |
+| [`modules/openalex.js`](src/chrome/content/modules/openalex.js)               | OpenAlex provider with streaming `streamSnowball` async generator.                              |
+| [`modules/ranking.js`](src/chrome/content/modules/ranking.js)                 | Per-candidate relevance scoring (text, citation-graph, author, and optional embedding signals). |
+| [`modules/semanticscholar.js`](src/chrome/content/modules/semanticscholar.js) | Optional SPECTER2 embeddings (only with an S2 API key).                                         |
+| [`modules/candidateStore.js`](src/chrome/content/modules/candidateStore.js)   | Review-dialog candidate list: exact and fuzzy-title dedupe, merging repeat sightings.           |
+| [`modules/candidateView.js`](src/chrome/content/modules/candidateView.js)     | Review-dialog filtering, sorting, and all display text.                                         |
+| [`modules/zoteroItems.js`](src/chrome/content/modules/zoteroItems.js)         | Seed extraction, library-existence check, item creation per Zotero type.                        |
+| [`modules/util.js`](src/chrome/content/modules/util.js)                       | Small helpers (`chunk`, `normalizeText`, `formatScore`).                                        |
 
 ---
 
