@@ -41,7 +41,7 @@ function inspectRGBA8PNG(filePath) {
   const colorType = source[25];
   const compressedRows = [];
 
-  for (let offset = signature.length; offset < source.length; ) {
+  for (let offset = signature.length; offset < source.length;) {
     const length = source.readUInt32BE(offset);
     const type = source.toString("ascii", offset + 4, offset + 8);
     const dataStart = offset + 8;

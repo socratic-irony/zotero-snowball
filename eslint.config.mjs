@@ -12,6 +12,10 @@ export default [
   {
     ignores: [
       "build/**",
+      // Local git worktrees (Claude Code / Codex / manual) contain full
+      // copies of the repo; linting them doubles every error.
+      ".worktrees/**",
+      ".claude/**",
       "node_modules/**",
       "**/*.xpi",
       "src/icons/**",

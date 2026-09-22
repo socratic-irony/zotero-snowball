@@ -10,3 +10,7 @@ CHANGELOG.md
 # and XUL elements is semantically meaningful and our tests assert on
 # specific single-line forms. xmllint already validates structure.
 *.xhtml
+
+# Local git worktrees (Claude Code / Codex / manual) — never part of the repo.
+.worktrees/
+.claude/

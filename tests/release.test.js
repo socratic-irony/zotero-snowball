@@ -98,11 +98,15 @@ test("bump-version.sh is executable and refuses non-monotonic targets", () => {
 
 test("actions are pinned to full lowercase SHAs with version comments", () => {
   const workflows = [".github/workflows/ci.yml", ".github/workflows/release.yml"];
-  const expected = new Map([
-    ["actions/checkout", "d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0"],
-    ["actions/setup-node", "249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0"],
-    ["actions/upload-artifact", "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"],
-    ["softprops/action-gh-release", "3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2"]
+  // The set of third-party actions we allow. Adding a new action is a
+  // deliberate supply-chain decision, so it must be listed here. We check
+  // the *shape* of each pin (40-hex SHA + `# vX.Y.Z` comment) rather than
+  // exact SHAs, so Dependabot bumps don't fail this test by construction.
+  const allowedActions = new Set([
+    "actions/checkout",
+    "actions/setup-node",
+    "actions/upload-artifact",
+    "softprops/action-gh-release"
   ]);
   const references = [];
 
@@ -127,12 +131,19 @@ test("actions are pinned to full lowercase SHAs with version comments", () => {
   assert.ok(references.length > 0, "expected at least one external action reference");
   for (const reference of references) {
     const [owner] = reference.split("@");
-    assert.equal(reference, `${owner}@${expected.get(owner)}`, `unexpected pin for ${owner}`);
+    assert.ok(allowedActions.has(owner), `unexpected third-party action: ${owner}`);
   }
-  assert.deepEqual(
-    new Set(references.map((reference) => reference.split("@")[0])),
-    new Set(expected.keys())
-  );
+  // The same action must be pinned to one SHA everywhere, so a partial
+  // bump (e.g. ci.yml updated but release.yml not) is caught.
+  const pinsByAction = new Map();
+  for (const reference of references) {
+    const [owner, pin] = reference.split("@");
+    if (!pinsByAction.has(owner)) pinsByAction.set(owner, new Set());
+    pinsByAction.get(owner).add(pin);
+  }
+  for (const [owner, pins] of pinsByAction) {
+    assert.equal(pins.size, 1, `${owner} is pinned to different SHAs across workflows`);
+  }
 });
 
 test("Dependabot has weekly actions and npm update entries", () => {
