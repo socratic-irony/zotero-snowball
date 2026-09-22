@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.9] – 2026-09-22
+
+### Fixed
+- Zotero 10 reported the plugin as incompatible. The manifest's
+  `strict_max_version` was `9.0.*`, which excluded every release after
+  9.0.x. It is now `10.*`. Zotero 10 runs on the same Firefox 140 platform
+  as Zotero 9, and the toolbar, keyboard-shortcut, menu, PDF-import, and
+  theme hooks the plugin uses are unchanged in 10.0.3.
+- A test now requires `strict_max_version` to cover a whole major version
+  (`N.*`) so a minor-level pin can't slip back in.
+
 ## [0.5.8] – 2026-09-22
 
 No user-visible behavior changes; this release is internal cleanup.
@@ -404,7 +415,8 @@ No user-visible behavior changes; this release is internal cleanup.
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.8...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.9...HEAD
+[0.5.9]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.5...v0.5.6

@@ -103,7 +103,14 @@ test("manifest includes Zotero-required add-on compatibility metadata", () => {
   assert.equal(manifest.version, packageJSON.version);
   assert.equal(zotero?.id, "snowball-sources@socratic-irony.github.io");
   assert.equal(zotero?.strict_min_version, "9.0");
-  assert.match(zotero?.strict_max_version, /^9\./);
+  // The max must cover a whole major version ("10.*"). A minor-level pin
+  // like "9.0.*" silently excludes the next minor release (9.1) and made
+  // the plugin "incompatible" as soon as Zotero 10 shipped.
+  assert.match(zotero?.strict_max_version, /^\d+\.\*$/, "strict_max_version must be `N.*`");
+  assert.ok(
+    Number.parseInt(zotero.strict_max_version, 10) >= 10,
+    "strict_max_version must include Zotero 10"
+  );
   assert.match(zotero?.update_url, /^https:\/\//);
 });
 

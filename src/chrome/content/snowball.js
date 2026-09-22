@@ -96,7 +96,7 @@ var SnowballSourcesPlugin = class {
    * other item-level commands. Falls back silently (logging) if the
    * expected container isn't present.
    *
-   * Zotero 9 styles its built-in toolbar icons via CSS keyed to the
+   * Zotero 9/10 style their built-in toolbar icons via CSS keyed to the
    * button id (the `image=` attribute is ignored on `.zotero-tb-button`
    * elements), so we inject a one-rule stylesheet alongside the button.
    * The icon lives under `chrome://snowball-sources/content/icons/` for

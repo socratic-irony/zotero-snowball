@@ -199,7 +199,7 @@ User → Right-click → Snowball Sources
 
 - Node.js 18+ (only used by the test runner and build script — no runtime deps).
 - macOS / Linux — the build script uses `bash` and `zip`.
-- A Zotero 9.0+ install. On macOS that's `/Applications/Zotero.app`.
+- Zotero 9 or 10. On macOS that's `/Applications/Zotero.app`.
 
 ### Quick start
 
