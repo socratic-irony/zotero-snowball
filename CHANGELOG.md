@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.8] – 2026-09-22
+
+No user-visible behavior changes; this release is internal cleanup.
+
+### Changed
+- Split the review dialog's logic out of `snowballDialog.js` into two
+  DOM-free modules: `candidateStore.js` (candidate list, exact and
+  fuzzy-title dedupe, merging repeat sightings) and `candidateView.js`
+  (filtering, sorting, and all display text). Both have unit tests.
+- `snowballDialog.js` is now type-checked (`// @ts-nocheck` removed).
+- Upgraded dev tooling (ESLint 10, Prettier 3.9, lefthook 2, globals 17)
+  and pinned GitHub Actions (checkout v7.0.1, setup-node v7.0.0,
+  action-gh-release v3.0.3).
+- Dependabot updates are grouped into one weekly PR for actions and one
+  for npm dev tooling.
+- Minimum Node version for development is now 22 (Node 20 is end of life).
+
+### Fixed
+- The action-pinning test no longer hard-codes exact SHAs, which had made
+  every Dependabot action bump fail CI. It now checks pin format, the
+  allowed-action list, and that each action uses one SHA across workflows.
+- `npm run lint` and the pre-push hook no longer scan local git worktrees
+  under `.worktrees/` and `.claude/`.
+
 ## [0.5.7] – 2026-07-22
 
 ### Added
@@ -380,7 +404,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.8...HEAD
+[0.5.8]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.7...v0.5.8
+[0.5.7]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.6...v0.5.7
+[0.5.6]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.2...v0.5.3

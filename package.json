@@ -1,6 +1,6 @@
 {
   "name": "zotero-snowball-sources",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "private": true,
   "description": "Zotero plugin for OpenAlex forward and backward citation snowballing.",
   "license": "MIT",
