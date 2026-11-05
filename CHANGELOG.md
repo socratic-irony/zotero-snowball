@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   were rejected".
 - The missing-key and rejected-key messages now name both places the key
   can be entered and link to the OpenAlex key page.
+- The Preferences dialog flags an email entered as the OpenAlex key when
+  you click Save, not only when a search starts.
+- The Preferences dialog opens at the size its layout needs (600×720) and
+  can be resized, so the Save buttons can't be cut off.
+- The Settings pane is registered after menus and toolbar buttons, so a
+  slow registration can't delay them.
 
 ### Fixed
 - The preferences dialog showed **Save anyway** next to **Save** at all

@@ -463,7 +463,7 @@ test("an email address in the key setting is caught before any request", async (
 
   const result = await runDialog({ apiKey: "researcher@example.com" }, []);
   assert.deepEqual(result.consumed, []);
-  assert.deepEqual(result.statuses.slice(-1), ["OpenAlex API key required"]);
+  assert.deepEqual(result.statuses.slice(-1), ["Check your OpenAlex API key"]);
   assert.match(result.progress.at(-1), /contains an email address/);
 });
 
@@ -476,4 +476,32 @@ test("openAlexKeyProblem accepts ordinary keys and rejects blank or email values
     SnowballError.openAlexCredentials({}).userMessage,
     /did not recognize your API key.*openalex\.org\/settings\/api-key/
   );
+});
+
+test("the preferences dialog flags an email entered as the OpenAlex key", () => {
+  const inputs = new Map();
+  const context = vm.createContext({
+    document: {
+      getElementById(id) {
+        return inputs.get(id) || null;
+      }
+    }
+  });
+  context.SnowballError = loadSnowballError();
+  vm.runInContext(readProjectFile("src/chrome/content/snowballPrefs.js"), context, {
+    filename: "snowballPrefs.js"
+  });
+
+  const validateKey = (value) => {
+    inputs.set("pref-openAlexAPIKey", { value });
+    return context.SnowballPrefs.validate();
+  };
+
+  const email = validateKey(" researcher@example.com ");
+  assert.equal(email.errors.length, 1);
+  assert.match(email.errors[0], /email address, not an API key/);
+  assert.equal(email.values.openAlexAPIKey, "researcher@example.com");
+
+  assert.equal(validateKey("abc123XYZ").errors.length, 0);
+  assert.equal(validateKey("").errors.length, 0);
 });

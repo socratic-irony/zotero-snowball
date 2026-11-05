@@ -11,8 +11,10 @@ var SnowballSourcesPlugin = class {
 
   async startup() {
     this.registerMenus();
-    await this.registerSettingsPane();
     this.addToAllWindows();
+    // Optional; awaited last so a slow registration can't hold up menus,
+    // toolbar buttons, or shortcuts.
+    await this.registerSettingsPane();
     Zotero.debug("Snowball Sources: startup complete");
   }
 
@@ -475,7 +477,7 @@ var SnowballSourcesPlugin = class {
     const dialog = win.openDialog(
       "chrome://snowball-sources/content/snowballPrefs.xhtml",
       "_blank",
-      "chrome,dialog=yes,centerscreen,resizable=no,modal=yes,width=520,height=520",
+      "chrome,dialog=yes,centerscreen,resizable=yes,modal=yes,width=600,height=720",
       { plugin: this }
     );
     if (dialog) {

@@ -174,6 +174,12 @@ var SnowballPrefs = {
         result.errors.push(`${name}: removed whitespace/newline characters.`);
         s = s.replace(/[\r\n\t]+/g, "");
       }
+      // Catch an email pasted as the OpenAlex key here, where it is entered,
+      // rather than only when a search starts. Blank is allowed to save.
+      if (name === "openAlexAPIKey" && s && typeof SnowballError !== "undefined") {
+        const problem = SnowballError.openAlexKeyProblem(s);
+        if (problem) result.errors.push(problem);
+      }
       result.values[name] = s;
     }
     return result;

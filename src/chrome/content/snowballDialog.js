@@ -122,7 +122,7 @@ var SnowballDialog = {
     const keyProblem = SnowballError.openAlexKeyProblem(this.args.providerConfig?.apiKey);
     if (keyProblem) {
       this.setLoading(false);
-      this.setStatus("OpenAlex API key required");
+      this.setStatus("Check your OpenAlex API key");
       this.setProgress(keyProblem);
       return;
     }
