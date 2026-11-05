@@ -73,6 +73,7 @@ function loadController(prefValues = {}) {
         unregisterMenu() {}
       }
     },
+    SnowballError: loadSnowballError(),
     SnowballZoteroItems: {
       getTargetContext() {
         return { libraryID: 1 };
@@ -96,6 +97,16 @@ function loadController(prefValues = {}) {
   return { context, plugin, alerts, openedDialogs };
 }
 
+// Only SnowballError is exposed, so tests that stub formatUserError keep
+// their own stub instead of errors.js's real implementation.
+function loadSnowballError() {
+  const errorsContext = vm.createContext({});
+  vm.runInContext(readProjectFile("src/chrome/content/modules/errors.js"), errorsContext, {
+    filename: "errors.js"
+  });
+  return errorsContext.SnowballError;
+}
+
 function loadDialog({ formatUserError = null, snowballLog = null } = {}) {
   const globals = {
     AbortController,
@@ -104,6 +115,7 @@ function loadDialog({ formatUserError = null, snowballLog = null } = {}) {
     Promise,
     Zotero: { debug() {} }
   };
+  globals.SnowballError = loadSnowballError();
   if (formatUserError) globals.formatUserError = formatUserError;
   if (snowballLog) globals.SnowballLog = snowballLog;
   return vm.createContext(globals);
@@ -193,7 +205,7 @@ test("exhaustive search is the default and the opt-in cap defaults to 1,000", ()
 test("the controller blocks missing credentials and passes the new provider mode", async () => {
   const controllerSource = readProjectFile("src/chrome/content/snowball.js");
   const dialogSource = readProjectFile("src/chrome/content/snowballDialog.js");
-  assert.match(controllerSource, /if\s*\(!apiKey\)/);
+  assert.match(controllerSource, /SnowballError\.openAlexKeyProblem\(apiKey\)/);
   assert.match(dialogSource, /limitResults\s*===\s*true/);
 
   const item = { title: "Seed", isRegularItem: () => true };
@@ -203,9 +215,12 @@ test("the controller blocks missing credentials and passes the new provider mode
 
   await missing.plugin.runForItems([item]);
 
-  assert.deepEqual(missing.alerts, [
-    "Enter your OpenAlex API key in Snowball Sources Preferences before searching."
-  ]);
+  assert.equal(missing.alerts.length, 1);
+  assert.match(
+    missing.alerts[0],
+    /^Enter your OpenAlex API key in Zotero Settings → Snowball Sources/
+  );
+  assert.match(missing.alerts[0], /https:\/\/openalex\.org\/settings\/api-key/);
   assert.equal(missing.openedDialogs.length, 0);
 
   const configured = loadController({
@@ -430,4 +445,35 @@ test("stream error fallback uses a generic message without a scrubber", async ()
     "Search failed — Unable to complete the search. Please try again. — 1 candidate loaded"
   );
   assert.doesNotMatch(result.progress.at(-1), new RegExp(secret));
+});
+
+test("an email address in the key setting is caught before any request", async () => {
+  const item = { title: "Seed", isRegularItem: () => true };
+  const emailKey = loadController({
+    "extensions.snowballSources.openAlexAPIKey": " researcher@example.com "
+  });
+
+  await emailKey.plugin.runForItems([item]);
+
+  assert.equal(emailKey.openedDialogs.length, 0);
+  assert.equal(emailKey.alerts.length, 1);
+  assert.match(emailKey.alerts[0], /contains an email address, not an API key/);
+  assert.match(emailKey.alerts[0], /https:\/\/openalex\.org\/settings\/api-key/);
+  assert.doesNotMatch(emailKey.alerts[0], /researcher@example\.com/);
+
+  const result = await runDialog({ apiKey: "researcher@example.com" }, []);
+  assert.deepEqual(result.consumed, []);
+  assert.deepEqual(result.statuses.slice(-1), ["OpenAlex API key required"]);
+  assert.match(result.progress.at(-1), /contains an email address/);
+});
+
+test("openAlexKeyProblem accepts ordinary keys and rejects blank or email values", () => {
+  const SnowballError = loadSnowballError();
+  assert.equal(SnowballError.openAlexKeyProblem("abc123XYZ"), "");
+  assert.match(SnowballError.openAlexKeyProblem("   "), /^Enter your OpenAlex API key/);
+  assert.match(SnowballError.openAlexKeyProblem("a.b@c.edu"), /email address/);
+  assert.match(
+    SnowballError.openAlexCredentials({}).userMessage,
+    /did not recognize your API key.*openalex\.org\/settings\/api-key/
+  );
 });

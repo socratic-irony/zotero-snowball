@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<!--
+  Pane shown in Zotero's own Settings window (registered via
+  Zotero.PreferencePanes in snowball.js). It exposes only the API keys,
+  bound directly to their prefs, so users who look in Zotero Settings can
+  find them. Everything else stays in Tools → Snowball Sources Preferences…
+-->
+<vbox
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  class="main-section">
+  <groupbox>
+    <label><html:h2>OpenAlex API key</html:h2></label>
+    <html:p>
+      Snowball Sources searches OpenAlex with your own API key. No project key is
+      bundled. Paste your key below; it is saved as soon as you type it.
+    </html:p>
+    <html:div>
+      <html:label for="snowball-settings-openAlexAPIKey">OpenAlex API key:</html:label>
+      <html:input
+        id="snowball-settings-openAlexAPIKey"
+        type="password"
+        autocomplete="off"
+        placeholder="(none)"
+        preference="extensions.snowballSources.openAlexAPIKey"/>
+    </html:div>
+  </groupbox>
+
+  <groupbox>
+    <label><html:h2>Semantic Scholar API key</html:h2></label>
+    <html:p>Optional. Reserved for future abstract enrichment.</html:p>
+    <html:div>
+      <html:label for="snowball-settings-semanticScholarAPIKey">Semantic Scholar API key:</html:label>
+      <html:input
+        id="snowball-settings-semanticScholarAPIKey"
+        type="password"
+        autocomplete="off"
+        placeholder="(none)"
+        preference="extensions.snowballSources.semanticScholarAPIKey"/>
+    </html:div>
+  </groupbox>
+
+  <groupbox>
+    <label><html:h2>Other options</html:h2></label>
+    <html:p>
+      Search scope, limits, columns, and score weights are in
+      Tools → Snowball Sources Preferences….
+    </html:p>
+  </groupbox>
+</vbox>

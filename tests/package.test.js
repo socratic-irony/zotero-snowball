@@ -125,6 +125,23 @@ test("API key fields conceal values and disable autocomplete", () => {
   }
 });
 
+test("Zotero Settings pane binds concealed API key fields to their prefs", () => {
+  const source = fs.readFileSync(
+    path.join(ROOT, "src/chrome/content/snowballSettingsPane.xhtml"),
+    "utf8"
+  );
+
+  for (const pref of ["openAlexAPIKey", "semanticScholarAPIKey"]) {
+    const input = source.match(
+      new RegExp(`<html:input\\b[^>]*\\bpreference="extensions\\.snowballSources\\.${pref}"[^>]*/>`)
+    )?.[0];
+    assert.ok(input, `${pref} must be bound in the settings pane`);
+    assert.match(input, /\btype="password"(?:\s|\/?>)/);
+    assert.match(input, /\bautocomplete="off"(?:\s|\/?>)/);
+  }
+  assert.doesNotMatch(source, /\son[a-z]+=/, "settings pane must not use inline handlers");
+});
+
 test("inline event handlers are replaced with lifecycle and button listeners", () => {
   const documents = [
     {
@@ -347,4 +364,12 @@ test("dialog and prefs scripts do not use window.alert / confirm / prompt", () =
       );
     }
   }
+});
+
+test("footer buttons toggled with hidden= are hidden by an explicit CSS rule", () => {
+  const xhtml = fs.readFileSync(path.join(ROOT, "src/chrome/content/snowballPrefs.xhtml"), "utf8");
+  const css = fs.readFileSync(path.join(ROOT, "src/chrome/content/snowballPrefs.css"), "utf8");
+
+  assert.match(xhtml, /<button\b[^>]*\bid="snowball-prefs-save-anyway"[^>]*\bhidden="hidden"/);
+  assert.match(css, /\.snowball-prefs-footer button\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
 });

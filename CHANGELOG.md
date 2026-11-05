@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- A **Snowball Sources** pane in Zotero's own Settings window with the
+  OpenAlex and Semantic Scholar API key fields, so the key can be found
+  where users look first. Other options stay in
+  Tools → Snowball Sources Preferences….
+
+### Changed
+- An email address entered as the OpenAlex API key is now caught before any
+  request, with a message explaining that OpenAlex needs a real key and
+  linking to https://openalex.org/settings/api-key. OpenAlex answers an
+  email in `api_key` with 401, which used to surface only as "credentials
+  were rejected".
+- The missing-key and rejected-key messages now name both places the key
+  can be entered and link to the OpenAlex key page.
+
+### Fixed
+- The preferences dialog showed **Save anyway** next to **Save** at all
+  times. XUL buttons ignore `hidden="hidden"`, so the footer now hides them
+  with an explicit CSS rule; **Save anyway** appears only after Save had to
+  adjust a value.
+
 ## [0.5.9] – 2026-09-22
 
 ### Fixed

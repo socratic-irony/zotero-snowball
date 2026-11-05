@@ -211,3 +211,48 @@ test("PDF downloads require a stored boolean true preference", async () => {
 
   assert.deepEqual(downloadOptions, [false, true]);
 });
+
+test("startup registers a Zotero Settings pane for the API keys", async () => {
+  const panes = [];
+  const { context } = loadController({
+    PreferencePanes: {
+      async register(options) {
+        panes.push(options);
+        return "pane-id";
+      }
+    }
+  });
+  const plugin = new context.SnowballSourcesPlugin({
+    id: "snowball-sources@socratic-irony.github.io",
+    version: "0.5.9",
+    rootURI: "jar:file:///snowball.xpi!/"
+  });
+
+  await plugin.startup();
+
+  assert.equal(panes.length, 1);
+  assert.equal(panes[0].pluginID, "snowball-sources@socratic-irony.github.io");
+  assert.equal(panes[0].label, "Snowball Sources");
+  assert.equal(panes[0].src, "jar:file:///snowball.xpi!/chrome/content/snowballSettingsPane.xhtml");
+  assert.ok(fs.existsSync(path.join(ROOT, "src/chrome/content/snowballSettingsPane.xhtml")));
+  assert.ok(fs.existsSync(path.join(ROOT, "src", panes[0].image.replace(/^.*!\//, ""))));
+});
+
+test("a failing settings pane registration does not block startup", async () => {
+  const { context, registered } = loadController({
+    PreferencePanes: {
+      async register() {
+        throw new Error("boom");
+      }
+    }
+  });
+  const plugin = new context.SnowballSourcesPlugin({
+    id: "snowball-sources@socratic-irony.github.io",
+    version: "0.5.9",
+    rootURI: "jar:file:///snowball.xpi!/"
+  });
+
+  await plugin.startup();
+
+  assert.equal(registered.length, 3);
+});

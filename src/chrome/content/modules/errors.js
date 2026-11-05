@@ -32,10 +32,44 @@ var SnowballError = class extends Error {
     return new SnowballError(code, userMessage, { cause: error, context });
   }
 
+  /**
+   * Check the configured OpenAlex key before any request is made. Returns a
+   * user-facing message when the key is missing or is obviously not a key
+   * (an email address, which OpenAlex used to accept as `mailto` but always
+   * rejects as `api_key`), or "" when it is worth sending.
+   */
+  static openAlexKeyProblem(rawKey) {
+    const key = String(rawKey || "").trim();
+    if (!key) {
+      return (
+        "Enter your OpenAlex API key in " +
+        SnowballError.OPENALEX_KEY_LOCATION +
+        " before searching. Get a free key at " +
+        SnowballError.OPENALEX_KEY_URL +
+        "."
+      );
+    }
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) {
+      return (
+        "The OpenAlex API key setting contains an email address, not an API key. " +
+        "OpenAlex no longer accepts an email in place of a key. Get a free key at " +
+        SnowballError.OPENALEX_KEY_URL +
+        " and paste it in " +
+        SnowballError.OPENALEX_KEY_LOCATION +
+        "."
+      );
+    }
+    return "";
+  }
+
   static openAlexCredentials(context) {
     return new SnowballError(
       SnowballError.CODES.OPENALEX_CREDENTIALS,
-      "OpenAlex credentials were rejected. Check your API key in Preferences.",
+      "OpenAlex did not recognize your API key. Copy your key from " +
+        SnowballError.OPENALEX_KEY_URL +
+        " and paste it in " +
+        SnowballError.OPENALEX_KEY_LOCATION +
+        ".",
       { context }
     );
   }
@@ -56,6 +90,10 @@ var SnowballError = class extends Error {
     );
   }
 };
+
+SnowballError.OPENALEX_KEY_URL = "https://openalex.org/settings/api-key";
+SnowballError.OPENALEX_KEY_LOCATION =
+  "Zotero Settings → Snowball Sources (or Tools → Snowball Sources Preferences…)";
 
 SnowballError.CODES = Object.freeze({
   OPENALEX_CREDENTIALS: "OPENALEX_CREDENTIALS",

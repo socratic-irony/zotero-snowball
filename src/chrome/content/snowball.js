@@ -1,4 +1,4 @@
-/* global Zotero, Services, OpenAlexProvider, SnowballZoteroItems, SnowballRanking */
+/* global Zotero, Services, SnowballError, OpenAlexProvider, SnowballZoteroItems, SnowballRanking */
 
 var SnowballSourcesPlugin = class {
   constructor({ id, version, rootURI }) {
@@ -11,8 +11,29 @@ var SnowballSourcesPlugin = class {
 
   async startup() {
     this.registerMenus();
+    await this.registerSettingsPane();
     this.addToAllWindows();
     Zotero.debug("Snowball Sources: startup complete");
+  }
+
+  /**
+   * Add a "Snowball Sources" pane to Zotero's own Settings window so the
+   * API key can be found where users expect it. Zotero removes plugin panes
+   * automatically when the plugin shuts down. A failure here must not stop
+   * the rest of the plugin from loading.
+   */
+  async registerSettingsPane() {
+    if (typeof Zotero.PreferencePanes?.register !== "function") return;
+    try {
+      await Zotero.PreferencePanes.register({
+        pluginID: this.id,
+        src: this.rootURI + "chrome/content/snowballSettingsPane.xhtml",
+        label: "Snowball Sources",
+        image: this.rootURI + "icons/icon-48.png"
+      });
+    } catch (error) {
+      Zotero.debug(`Snowball Sources: settings pane registration failed: ${error}`);
+    }
   }
 
   registerMenus() {
@@ -337,8 +358,9 @@ var SnowballSourcesPlugin = class {
 
     try {
       const apiKey = this.prefStr("openAlexAPIKey", "").trim();
-      if (!apiKey) {
-        this.alert("Enter your OpenAlex API key in Snowball Sources Preferences before searching.");
+      const keyProblem = SnowballError.openAlexKeyProblem(apiKey);
+      if (keyProblem) {
+        this.alert(keyProblem);
         return;
       }
 

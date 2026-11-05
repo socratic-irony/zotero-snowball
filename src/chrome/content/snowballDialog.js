@@ -119,13 +119,11 @@ var SnowballDialog = {
     this.setLoading(true);
     this.setStatus("Starting…");
 
-    const apiKey = String(this.args.providerConfig?.apiKey || "").trim();
-    if (!apiKey) {
+    const keyProblem = SnowballError.openAlexKeyProblem(this.args.providerConfig?.apiKey);
+    if (keyProblem) {
       this.setLoading(false);
       this.setStatus("OpenAlex API key required");
-      this.setProgress(
-        "Enter your OpenAlex API key in Snowball Sources Preferences before searching."
-      );
+      this.setProgress(keyProblem);
       return;
     }
 
