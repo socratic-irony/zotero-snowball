@@ -104,6 +104,12 @@
   font-weight: 600;
 }
 
+/* XUL <button> only honors hidden="true" natively; snowballPrefs.js toggles
+ * hidden="hidden" to swap Save ↔ Save anyway, so hide explicitly. */
+.snowball-prefs-footer button[hidden] {
+  display: none;
+}
+
 /* ----- Inline confirmation panel — replaces the [JavaScript Application]
  *       window.confirm() popup that fires when input was clamped on save.
  *       Lives in the footer area; appears in place of the regular buttons.
