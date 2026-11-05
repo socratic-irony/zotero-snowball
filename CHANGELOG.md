@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] – 2026-11-04
+
 ### Added
 - A **Snowball Sources** pane in Zotero's own Settings window with the
   OpenAlex and Semantic Scholar API key fields, so the key can be found
@@ -442,7 +444,8 @@ No user-visible behavior changes; this release is internal cleanup.
 
 Initial MVP per [`spec.md`](spec.md).
 
-[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.9...HEAD
+[Unreleased]: https://github.com/socratic-irony/zotero-snowball/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.9...v0.6.0
 [0.5.9]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/socratic-irony/zotero-snowball/compare/v0.5.6...v0.5.7
